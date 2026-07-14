@@ -1,0 +1,275 @@
+/* Wallboard — mørkt, roligt, læsbart på afstand. Ingen eksterne fonte/CDN'er:
+   udelukkende systemets egne skrifttyper. Designet til fast 1920×1080 kiosk-visning. */
+
+:root {
+	--bg: #0b0f14;
+	--panel-bg: #11161d;
+	--panel-border: #1f2733;
+	--text: #eef2f6;
+	--text-muted: #8b96a5;
+	--accent: #4da3ff;
+
+	--status-in-progress: #2563eb;
+	--status-completed: #16a34a;
+	--status-open: #0ea5b7;
+	--status-full: #d97706;
+	--status-cancelled: #6b7280;
+	--status-planned: #52525b;
+	--status-assigned: #7c3aed;
+	--status-default: #3a3f47;
+
+	--offline: #b45309;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	font-size: 22px;
+}
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+	overflow: hidden; /* ingen scrollbar — indhold pagineres i stedet */
+	background: var(--bg);
+	color: var(--text);
+	font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+	display: flex;
+	flex-direction: column;
+}
+
+/* ---- Topbjælke ------------------------------------------------------- */
+
+.topbar {
+	display: flex;
+	align-items: center;
+	gap: 2.5rem;
+	padding: 1rem 2rem;
+	background: var(--panel-bg);
+	border-bottom: 1px solid var(--panel-border);
+	flex-shrink: 0;
+}
+
+.topbar-title {
+	font-size: 1.6rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.topbar-date {
+	font-size: 1.3rem;
+	color: var(--text-muted);
+}
+
+.topbar-clock {
+	font-size: 1.6rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.topbar-status {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	font-size: 1.2rem;
+	color: var(--text-muted);
+}
+
+.topbar-updated {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	font-size: 1.2rem;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.status-dot {
+	width: 0.7rem;
+	height: 0.7rem;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.status-dot-online {
+	background: var(--status-completed);
+	animation: pulse 2.4s ease-in-out infinite;
+}
+
+.status-dot-offline {
+	background: var(--offline);
+}
+
+.updating-dot {
+	width: 0.55rem;
+	height: 0.55rem;
+	border-radius: 50%;
+	background: var(--accent);
+	animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.status-dot-online,
+	.updating-dot {
+		animation: none;
+	}
+}
+
+/* ---- Offline-banner ---------------------------------------------------- */
+
+.offline-banner {
+	flex-shrink: 0;
+	background: var(--offline);
+	color: #fff;
+	text-align: center;
+	padding: 0.6rem 1rem;
+	font-size: 1.15rem;
+	font-weight: 600;
+}
+
+/* ---- Hovedlayout --------------------------------------------------------- */
+
+.board {
+	flex: 1;
+	display: flex;
+	min-height: 0;
+}
+
+.panel-column {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+}
+
+.panel {
+	position: relative;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+	padding: 1.5rem 2rem;
+	border: 1px solid var(--panel-border);
+	background: var(--panel-bg);
+	margin: 0.6rem;
+}
+
+.panel-heading {
+	margin: 0 0 1rem 0;
+	font-size: 1.5rem;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}
+
+.list {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 0.9rem;
+	min-height: 0;
+	overflow: hidden;
+	transition: opacity 200ms ease;
+}
+
+/* ---- Rækker/badges --------------------------------------------------- */
+
+.row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1.2rem;
+	padding-bottom: 0.9rem;
+	border-bottom: 1px solid var(--panel-border);
+}
+
+.row:last-child {
+	border-bottom: none;
+}
+
+.row-main {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	min-width: 0;
+}
+
+.row-number {
+	font-size: 1.05rem;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.row-title {
+	font-size: 1.55rem;
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.row-meta {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 0.25rem;
+	font-size: 1.15rem;
+	color: var(--text-muted);
+	text-align: right;
+	flex-shrink: 0;
+}
+
+.badge {
+	flex-shrink: 0;
+	padding: 0.45rem 1rem;
+	border-radius: 0.4rem;
+	font-size: 1.05rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	text-align: center;
+	color: #fff;
+	background: var(--status-default);
+}
+
+.badge-status-in_progress { background: var(--status-in-progress); }
+.badge-status-completed { background: var(--status-completed); }
+.badge-status-open { background: var(--status-open); }
+.badge-status-full { background: var(--status-full); }
+.badge-status-cancelled { background: var(--status-cancelled); }
+.badge-status-planned { background: var(--status-planned); }
+.badge-status-assigned { background: var(--status-assigned); }
+
+.empty-message {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-muted);
+	font-size: 1.4rem;
+	font-style: italic;
+}
+
+.page-indicator {
+	position: absolute;
+	right: 1.5rem;
+	bottom: 1rem;
+	font-size: 1rem;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}

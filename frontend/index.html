@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="da">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=1920, initial-scale=1" />
+	<title>Driftsoverblik</title>
+	<link rel="icon" href="data:," />
+	<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+	<header class="topbar">
+		<div class="topbar-title">Driftsoverblik</div>
+		<div class="topbar-date" id="current-date">–</div>
+		<div class="topbar-clock" id="current-time">--:--</div>
+		<div class="topbar-status">
+			<span class="status-dot status-dot-offline" id="source-status-dot"></span>
+			<span id="source-status-text">Starter…</span>
+		</div>
+		<div class="topbar-updated">
+			<span class="updating-dot" id="updating-dot" hidden></span>
+			Opdateret <span id="last-updated-time">–</span>
+		</div>
+	</header>
+
+	<div class="offline-banner" id="offline-banner" hidden>
+		Offline – viser senest hentede data · <span id="cache-age"></span>
+	</div>
+
+	<main class="board">
+		<section class="panel panel-inprogress">
+			<h2 class="panel-heading">Igangværende opgaver</h2>
+			<div class="list" id="inprogress-list"></div>
+			<p class="empty-message" id="inprogress-empty" hidden>Ingen igangværende opgaver</p>
+			<div class="page-indicator" id="inprogress-page-indicator" hidden></div>
+		</section>
+
+		<section class="panel-column">
+			<section class="panel panel-completed">
+				<h2 class="panel-heading">Afsluttet i dag</h2>
+				<div class="list" id="completed-list"></div>
+				<p class="empty-message" id="completed-empty" hidden>Ingen afsluttede opgaver i dag</p>
+				<div class="page-indicator" id="completed-page-indicator" hidden></div>
+			</section>
+
+			<section class="panel panel-shifts">
+				<h2 class="panel-heading">Vagter</h2>
+				<div class="list" id="shifts-list"></div>
+				<p class="empty-message" id="shifts-empty" hidden>Ingen vagter</p>
+				<div class="page-indicator" id="shifts-page-indicator" hidden></div>
+			</section>
+		</section>
+	</main>
+
+	<script src="status-map.js"></script>
+	<script src="app.js"></script>
+</body>
+</html>
