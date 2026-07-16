@@ -315,6 +315,15 @@ dato-filtrering af afsluttede opgaver, og sortering af vagter.
 - **Chromium starter ikke**: tjek at `/opt/wallboard/deployment/kiosk-autostart.sh`
   er eksekverbar og korrekt refereret i autostart-filen, og at `/health`
   rent faktisk svarer (`curl http://127.0.0.1/health`).
+- **Servicen crash-looper med `Fatal error ... Check failed: 12 == errno` /
+  `status=5/TRAP` i `journalctl -u wallboard`**: dette var en bug i en
+  tidligere version af `deployment/wallboard.service`, som satte
+  `MemoryDenyWriteExecute=true`. Den seccomp-hærdning er uforenelig med
+  Node.js' V8-JIT-motor (den kræver at kunne mprotect()'e kodesider fra
+  skrivbare til eksekverbare — netop det denne indstilling blokerer). Hent
+  den rettede `wallboard.service` (`git pull` + `sudo ./install.sh`, eller
+  kopiér filen manuelt til `/etc/systemd/system/wallboard.service` og kør
+  `sudo systemctl daemon-reload && sudo systemctl restart wallboard`).
 
 ## Sikkerhed
 

@@ -31,7 +31,18 @@ ProtectClock=true
 RestrictSUIDSGID=true
 LockPersonality=true
 RestrictRealtime=true
-MemoryDenyWriteExecute=true
+
+# [2026-07-16, bugfix] MemoryDenyWriteExecute=true (fjernet) er uforenelig
+# med Node.js' V8-motor: JIT-kompilering (Baseline/Sparkplug-compileren)
+# allokerer kode-sider som skrivbare, skriver bytecode, og mprotect()'er dem
+# derefter til eksekverbare — den flertrins W^X-veksling er præcis hvad
+# denne seccomp-hærdning blokerer. Symptom var en total crash-loop ved
+# opstart: "Fatal error ... Check failed: 12 == errno" (ENOMEM) inde i
+# v8::internal::MemoryAllocator::SetPermissionsOnExecutableMemoryChunk(),
+# efterfulgt af SIGTRAP og gentagne systemd-genstarter. Se systemd.exec(5):
+# "this option is not suitable for services that generate program code
+# dynamically, for example JIT engines" — Node.js er præcis sådan en motor.
+# De øvrige hærdningsdirektiver herover rører ikke ved JIT'en og er uændrede.
 
 [Install]
 WantedBy=multi-user.target
