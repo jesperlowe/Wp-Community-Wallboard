@@ -100,7 +100,8 @@ som udelukkende bygger sit output via allowlisting (aldrig `{...raw}`).
     { "id": 45, "title": "Aftenvagt", "startTime": "2026-07-14T18:00:00+02:00",
       "endTime": "2026-07-14T22:00:00+02:00", "status": "open",
       "participantNames": ["Mikkel", "Sofie"] }
-  ]
+  ],
+  "branding": { "logoUrl": "https://klanrover.dk/wp-content/uploads/2026/01/logo.png" }
 }
 ```
 
@@ -109,6 +110,13 @@ fordi WordPress lige nu er utilgængeligt — `cacheAgeSeconds` fortæller hvor
 gammel den cachede data er. Har wallboardet ALDRIG hentet data succesfuldt
 endnu (frisk installation, ingen disk-cache), er `generatedAt`/`cacheAgeSeconds`
 begge `null` i stedet for en vildledende værdi.
+
+`branding.logoUrl` hentes fra WordPress' offentlige (uautentificerede)
+`/app-config`-endpoint — samme logo som appens splash-skærm bruger, sat under
+wp-admin → WP Community → Indstillinger. `null` hvis intet logo er sat, eller
+i `API_MODE=mock`. En fejl her (fx en ældre WP-installation uden endpointet)
+påvirker aldrig `stale`/`sourceStatus` for selve driftsdataene — det seneste
+kendte logo beholdes blot.
 
 `assignedNames` udelades helt fra en opgave når `SHOW_ASSIGNEES=false`.
 `upcoming` er opgaver med status `planned` og en aftaletid/deadline

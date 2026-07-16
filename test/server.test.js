@@ -72,6 +72,9 @@ test('GET /api/wallboard (mock-mode): svarer med det rensede wallboard-format, i
 			assert.equal(Object.prototype.hasOwnProperty.call(shift, 'participantNames'), false);
 		}
 
+		// Mock-mode har ingen rigtig WordPress at hente et logo fra.
+		assert.deepEqual(body.branding, { logoUrl: null });
+
 		const raw = JSON.stringify(body);
 		for (const forbidden of ['contact_phone', 'pickup_address', 'delivery_address', 'application_password', 'WP_APPLICATION_PASSWORD', 'description', 'assigned_vehicle']) {
 			assert.equal(raw.includes(forbidden), false, `"${forbidden}" må ikke optræde i /api/wallboard-svaret`);

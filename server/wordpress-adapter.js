@@ -30,7 +30,7 @@ function buildUrl(config, routePath, params) {
 	return url;
 }
 
-async function wpFetch(config, routePath, params) {
+async function wpFetchRaw(config, routePath, params) {
 	const url = buildUrl(config, routePath, params);
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), config.fetchTimeoutMs);
@@ -71,11 +71,26 @@ async function wpFetch(config, routePath, params) {
 	if (!json || json.success !== true) {
 		throw new Error(`WordPress-svar mangler success:true for ${routePath}`);
 	}
-	if (!Array.isArray(json.data)) {
-		throw new Error(`Uventet svarformat (data er ikke en liste) for ${routePath}`);
-	}
 
 	return json.data;
+}
+
+/** For endpoints der returnerer en liste (tasks/shifts/arrangements). */
+async function wpFetch(config, routePath, params) {
+	const data = await wpFetchRaw(config, routePath, params);
+	if (!Array.isArray(data)) {
+		throw new Error(`Uventet svarformat (data er ikke en liste) for ${routePath}`);
+	}
+	return data;
+}
+
+/** For endpoints der returnerer ét objekt (fx /app-config). */
+async function wpFetchObject(config, routePath, params) {
+	const data = await wpFetchRaw(config, routePath, params);
+	if (!data || typeof data !== 'object' || Array.isArray(data)) {
+		throw new Error(`Uventet svarformat (data er ikke et objekt) for ${routePath}`);
+	}
+	return data;
 }
 
 // ---- Hjælpefunktioner til robust felt-udtræk --------------------------
@@ -335,6 +350,21 @@ function filterToActiveArrangements(rawItems, activeIds) {
 	});
 }
 
+// ---- Mapping: branding (logo) --------------------------------------------
+
+/**
+ * /app-config er et OFFENTLIGT, ikke-autentificeret endpoint i
+ * klan-rover-core (samme som appens splash-skærm bruger til logoet før
+ * login) — ingen risiko ved at eksponere logo-URL'en, den er per definition
+ * allerede offentligt tilgængelig. Allowlister alligevel kun logo_url; de
+ * øvrige app-config-felter (app_name, primary_color, support_email,
+ * features) er ikke wallboardets ansvar at vise.
+ */
+function mapBranding(raw) {
+	const logoUrl = toStr(raw && raw.logo_url);
+	return { logoUrl: logoUrl || null };
+}
+
 // ---- Offentlig API ---------------------------------------------------------
 
 function createAdapter(config) {
@@ -422,7 +452,13 @@ function createAdapter(config) {
 		return filterAndSortShifts(mapped);
 	}
 
-	return { fetchInProgressTasks, fetchCompletedTasks, fetchUpcomingTasks, fetchShifts };
+	async function fetchBranding() {
+		if (isMock) return mapBranding({});
+		const raw = await wpFetchObject(config, '/app-config', {});
+		return mapBranding(raw);
+	}
+
+	return { fetchInProgressTasks, fetchCompletedTasks, fetchUpcomingTasks, fetchShifts, fetchBranding };
 }
 
 module.exports = {
@@ -438,4 +474,5 @@ module.exports = {
 	extractAssignedNames,
 	extractShiftFirstNames,
 	filterToActiveArrangements,
+	mapBranding,
 };

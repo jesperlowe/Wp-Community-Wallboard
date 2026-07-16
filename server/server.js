@@ -39,6 +39,7 @@ function createServer(config) {
 		lastFetchAt: null, // Date
 		lastFetchOk: false,
 		consecutiveFailures: 0,
+		branding: { logoUrl: null },
 	};
 
 	let refreshTimer = null;
@@ -76,6 +77,17 @@ function createServer(config) {
 			}
 		}
 
+		// Branding (logo) er en selvstændig, ikke-kritisk hentning — en fejl
+		// her (fx en ældre klan-rover-core-installation uden /app-config) må
+		// aldrig påvirke stale/offline-status for selve driftsdataene. Ved
+		// fejl beholdes blot det senest kendte logo (ikke persisteret til
+		// disk-cachen — rent kosmetisk, ikke værd at komplicere cache-formatet for).
+		try {
+			state.branding = await adapter.fetchBranding();
+		} catch (err) {
+			console.error('[wallboard] kunne ikke hente branding:', err.message);
+		}
+
 		if (!stopped) {
 			scheduleNext();
 		}
@@ -109,6 +121,7 @@ function createServer(config) {
 			cacheAgeSeconds: fetchedMs !== null ? Math.max(0, Math.round((nowMs - fetchedMs) / 1000)) : null,
 			tasks: payload.tasks,
 			shifts: payload.shifts,
+			branding: state.branding,
 		};
 	}
 

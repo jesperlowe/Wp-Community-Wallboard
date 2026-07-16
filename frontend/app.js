@@ -286,6 +286,31 @@
 		updatingDot.hidden = !isUpdating;
 	}
 
+	// ---- Logo (fra WordPress' offentlige /app-config, se README) --------------
+
+	var topbarLogo = document.getElementById('topbar-logo');
+	var currentLogoUrl = null;
+
+	topbarLogo.addEventListener('error', function () {
+		// Fx et midlertidigt utilgængeligt WP-site — skjul i stedet for et
+		// ødelagt billede-ikon; næste vellykkede hentning prøver igen.
+		topbarLogo.hidden = true;
+	});
+
+	function updateBranding(json) {
+		var logoUrl = (json.branding && json.branding.logoUrl) || null;
+		if (logoUrl === currentLogoUrl) return;
+		currentLogoUrl = logoUrl;
+
+		if (logoUrl) {
+			topbarLogo.src = logoUrl;
+			topbarLogo.hidden = false;
+		} else {
+			topbarLogo.hidden = true;
+			topbarLogo.removeAttribute('src');
+		}
+	}
+
 	// ---- Data-polling med eksponentiel backoff ved fejl -----------------------
 
 	var lastRenderedJson = { inProgress: null, completed: null, upcoming: null, shifts: null };
@@ -295,6 +320,7 @@
 	function applyData(json) {
 		updateMeta(json);
 		updateOfflineBanner(json);
+		updateBranding(json);
 
 		var tasks = json.tasks || {};
 		var inProgress = Array.isArray(tasks.inProgress) ? tasks.inProgress : [];

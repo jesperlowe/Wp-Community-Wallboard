@@ -497,3 +497,50 @@ test('createAdapter (live): getRawShifts sender include_users=1 når SHOW_SHIFT_
 		global.fetch = originalFetch;
 	}
 });
+
+// ---- Branding (logo fra det offentlige /app-config) ------------------------
+
+test('mapBranding: udtrækker logo_url, tom/manglende værdi giver null', () => {
+	assert.deepEqual(adapter.mapBranding({ logo_url: 'https://eksempel.dk/logo.png', app_name: 'Skal ignoreres' }), { logoUrl: 'https://eksempel.dk/logo.png' });
+	assert.deepEqual(adapter.mapBranding({ logo_url: '' }), { logoUrl: null });
+	assert.deepEqual(adapter.mapBranding({}), { logoUrl: null });
+	assert.deepEqual(adapter.mapBranding(null), { logoUrl: null });
+});
+
+test('createAdapter (mock): fetchBranding giver logoUrl=null — ingen rigtig WordPress at hente et logo fra', async () => {
+	const adapterInstance = adapter.createAdapter({ ...baseConfig, apiMode: 'mock' });
+	const branding = await adapterInstance.fetchBranding();
+	assert.deepEqual(branding, { logoUrl: null });
+});
+
+test('createAdapter (live): fetchBranding henter fra /app-config og allowlister kun logo_url', async () => {
+	const originalFetch = global.fetch;
+	global.fetch = async (url) => {
+		assert.ok(url.pathname.endsWith('/app-config'));
+		return {
+			ok: true,
+			status: 200,
+			json: async () => ({ success: true, data: { app_name: 'Test', primary_color: '#000', logo_url: 'https://eksempel.dk/logo.png' } }),
+		};
+	};
+
+	try {
+		const config = { ...baseConfig, apiMode: 'live', wpBaseUrl: 'https://example.invalid', wpApiNamespace: '/wp-json/wp-community/v1', wpUsername: 'u', wpApplicationPassword: 'p', fetchTimeoutMs: 1000, arrangementId: null };
+		const branding = await adapter.createAdapter(config).fetchBranding();
+		assert.deepEqual(branding, { logoUrl: 'https://eksempel.dk/logo.png' });
+	} finally {
+		global.fetch = originalFetch;
+	}
+});
+
+test('createAdapter (live): fetchBranding kaster hvis /app-config uventet returnerer en liste i stedet for et objekt', async () => {
+	const originalFetch = global.fetch;
+	global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
+
+	try {
+		const config = { ...baseConfig, apiMode: 'live', wpBaseUrl: 'https://example.invalid', wpApiNamespace: '/wp-json/wp-community/v1', wpUsername: 'u', wpApplicationPassword: 'p', fetchTimeoutMs: 1000, arrangementId: null };
+		await assert.rejects(() => adapter.createAdapter(config).fetchBranding(), /objekt/);
+	} finally {
+		global.fetch = originalFetch;
+	}
+});
