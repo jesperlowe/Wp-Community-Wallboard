@@ -232,19 +232,67 @@ function filterAndSortShifts(mappedShifts, nowMs = Date.now()) {
 		});
 }
 
+// ---- Arrangement-scoping ------------------------------------------------
+
+/**
+ * [2026-07-16] En almindelig (ikke-WP-administrator) konto kan — uanset
+ * hvilke wpc_*-capabilities den har — kun se opgaver/vagter for arrangementer
+ * den selv er MEDLEM af (se WPC_Arrangement_Access::can_view_task()/
+ * can_view_shift() i klan-rover-operations: alt falder til
+ * can_view_arrangement(), som kræver medlemskab eller ægte administrator).
+ * Et enkelt ARRANGEMENT_ID løser det ved at være medlem af netop det ene.
+ * Uden et fast ARRANGEMENT_ID slår wallboardet i stedet selv op hvilke
+ * arrangementer der aktuelt er "active" og viser data for alle af dem —
+ * men wallboard-kontoen skal stadig gøres til deltager i hvert af dem i
+ * wp-admin, ellers filtrerer WordPress dem fra på samme måde som ved ét
+ * fast ARRANGEMENT_ID. Se README.md's "Konfiguration"-afsnit.
+ */
+function filterToActiveArrangements(rawItems, activeIds) {
+	if (!activeIds) return rawItems; // mock-mode eller eksplicit ARRANGEMENT_ID — WP har allerede scopet resultatet korrekt
+	return rawItems.filter((item) => {
+		const id = toIntOrNull(item && item.arrangement_id);
+		return id !== null && activeIds.has(id);
+	});
+}
+
 // ---- Offentlig API ---------------------------------------------------------
 
 function createAdapter(config) {
 	const isMock = config.apiMode === 'mock';
 
+	// Cacher IKKE på tværs af refresh-cyklusser — kun inden for én, så de tre
+	// parallelle fetch*-kald (se server.js' refreshOnce()) deler ét enkelt
+	// /arrangements-opslag i stedet for at hente listen tre gange. Nulstilles
+	// så snart opslaget er afsluttet (success eller fejl), så næste
+	// refresh-cyklus altid henter en frisk liste.
+	let activeArrangementIdsPromise = null;
+
+	async function getActiveArrangementIds() {
+		if (isMock || config.arrangementId) return null; // ikke nødvendigt i disse tilstande
+
+		if (!activeArrangementIdsPromise) {
+			activeArrangementIdsPromise = wpFetch(config, '/arrangements', { status: 'active' })
+				.then((raw) => new Set(raw.map((a) => toIntOrNull(a && a.id)).filter((id) => id !== null)))
+				.finally(() => {
+					activeArrangementIdsPromise = null;
+				});
+		}
+
+		return activeArrangementIdsPromise;
+	}
+
 	async function getRawInProgressTasks() {
 		if (isMock) return mockData.mockInProgressTasksResponse().data;
-		return wpFetch(config, '/tasks', { scope: 'all', status: 'in_progress', arrangement_id: config.arrangementId });
+		const activeIds = await getActiveArrangementIds();
+		const raw = await wpFetch(config, '/tasks', { scope: 'all', status: 'in_progress', arrangement_id: config.arrangementId });
+		return filterToActiveArrangements(raw, activeIds);
 	}
 
 	async function getRawCompletedTasks() {
 		if (isMock) return mockData.mockCompletedTasksResponse().data;
-		return wpFetch(config, '/tasks', { scope: 'all', status: 'completed', arrangement_id: config.arrangementId });
+		const activeIds = await getActiveArrangementIds();
+		const raw = await wpFetch(config, '/tasks', { scope: 'all', status: 'completed', arrangement_id: config.arrangementId });
+		return filterToActiveArrangements(raw, activeIds);
 	}
 
 	async function getRawShifts() {
@@ -253,12 +301,14 @@ function createAdapter(config) {
 		const to = time.dateKeyInTimezone(nowMs + config.shiftLookaheadHours * 3600 * 1000, config.timezone);
 
 		if (isMock) return mockData.mockShiftsResponse().data;
-		return wpFetch(config, '/shifts', {
+		const activeIds = await getActiveArrangementIds();
+		const raw = await wpFetch(config, '/shifts', {
 			from,
 			to,
 			include_users: 0,
 			arrangement_id: config.arrangementId,
 		});
+		return filterToActiveArrangements(raw, activeIds);
 	}
 
 	async function fetchInProgressTasks() {
@@ -291,4 +341,5 @@ module.exports = {
 	filterAndSortShifts,
 	sortInProgress,
 	extractAssignedNames,
+	filterToActiveArrangements,
 };

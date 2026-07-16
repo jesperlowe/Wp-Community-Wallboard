@@ -54,14 +54,14 @@ Kopiér `.env.example` til `.env` og udfyld:
 | `PORT` | Port Node-serveren lytter på (kun `127.0.0.1`, se nedenfor). |
 | `WP_BASE_URL` | WordPress-sitets base-URL. Skal være HTTPS for eksterne hosts — `http://` afvises, undtagen for `localhost`/`127.0.0.1`/`*.local` til udvikling. |
 | `WP_API_NAMESPACE` | REST-namespace, normalt `/wp-json/wp-community/v1`. |
-| `WP_USERNAME` / `WP_APPLICATION_PASSWORD` | En dedikeret WordPress-bruger (fx `wallboard`) med et Application Password og `wpc_access_app`-rettigheden. Opret det under brugerens profil i wp-admin. |
+| `WP_USERNAME` / `WP_APPLICATION_PASSWORD` | En dedikeret WordPress-bruger (fx `wallboard`) med et Application Password og **kun** `wpc_access_app`-rettigheden — brug pluginets egen side "WP Community → Brugere & Roller", ikke en `wpc_leader`/`wpc_admin`-rolle (unødvendigt bredt for en kiosk-konto). Et Application Password kan enten oprettes under brugerens profil i wp-admin, eller hentes programmatisk (samme vej som selve appen bruger): `POST /wp-json/wp-community/v1/login` med `{"username":"...","password":"..."}` returnerer et `app_password` i svaret. **Vigtigt**: uanset hvilke `wpc_*`-rettigheder kontoen har, kan den (medmindre den er en ægte WP-administrator) kun se opgaver/vagter for arrangementer den selv er **deltager** i — se `ARRANGEMENT_ID` nedenfor. |
 | `TIMEZONE` | IANA-tidszone, bruges til at kombinere vagters dato+klokkeslæt til korrekt ISO 8601 og til "afsluttet i dag"-filtrering. |
 | `REFRESH_SECONDS` | Hvor ofte serveren henter nye data fra WordPress, og hvor ofte frontenden poller `/api/wallboard`. |
 | `COMPLETED_TASK_LIMIT` | Maks. antal opgaver i "Afsluttet i dag". |
 | `COMPLETED_LOOKBACK_HOURS` | En afsluttet opgave vises hvis den er afsluttet i dag ELLER inden for dette antal timer. |
 | `SHIFT_LOOKAHEAD_HOURS` | Hvor langt frem i tiden der hentes vagter. |
 | `SHOW_ASSIGNEES` | `false` udelader `assignedNames` fra opgaver helt (ikke bare en tom liste). |
-| `ARRANGEMENT_ID` | Valgfri — begræns til ét arrangement, hvis WP-installationen understøtter parameteren. |
+| `ARRANGEMENT_ID` | Tomt (standard): vis data for **alle arrangementer med status `active`** — wallboardet slår selv `GET /arrangements?status=active` op ved hver opdatering. Sæt til et bestemt tal for i stedet kun at vise ét fast arrangement. **I begge tilfælde** skal `WP_USERNAME`-kontoen være tilføjet som deltager i de(t) relevante arrangement(er) i wp-admin (Arrangementer → rediger → Deltagere) — ellers filtrerer WordPress dem fra uanset kontoens `wpc_*`-rettigheder. |
 | `API_MODE` | `mock` for udvikling uden WordPress, ellers `live` (default). |
 
 **Credentials ligger udelukkende i `.env` på Raspberry Pi'en.** De sendes

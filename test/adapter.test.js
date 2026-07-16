@@ -259,3 +259,89 @@ test('createAdapter (live): ændret/uventet svarformat (data er ikke en liste) k
 		global.fetch = originalFetch;
 	}
 });
+
+// ---- Arrangement-scoping (ARRANGEMENT_ID tomt = "alle aktive arrangementer") ----
+
+test('filterToActiveArrangements: beholder kun elementer hvis arrangement_id er i det aktive sæt', () => {
+	const items = [
+		{ id: 1, arrangement_id: 3 },
+		{ id: 2, arrangement_id: 5 },
+		{ id: 3, arrangement_id: null },
+		{ id: 4 }, // arrangement_id helt udeladt
+	];
+	const activeIds = new Set([3, 7]);
+	const result = adapter.filterToActiveArrangements(items, activeIds);
+	assert.deepEqual(result.map((i) => i.id), [1]);
+});
+
+test('filterToActiveArrangements: activeIds=null (mock-mode/eksplicit ARRANGEMENT_ID) returnerer input uændret', () => {
+	const items = [{ id: 1, arrangement_id: 3 }];
+	assert.deepEqual(adapter.filterToActiveArrangements(items, null), items);
+});
+
+test('createAdapter (live, intet ARRANGEMENT_ID): henter aktive arrangementer og filtrerer til dem — ét delt /arrangements-kald for alle tre lister', async () => {
+	const originalFetch = global.fetch;
+	let arrangementsCallCount = 0;
+
+	global.fetch = async (url) => {
+		if (url.pathname.endsWith('/arrangements')) {
+			arrangementsCallCount += 1;
+			return { ok: true, status: 200, json: async () => ({ success: true, data: [{ id: 3, title: 'Aktivt', status: 'active' }] }) };
+		}
+		if (url.pathname.endsWith('/tasks')) {
+			return {
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					data: [
+						{ id: 1, task_number: 'A-1', title: 'Hører til aktivt arrangement', status: 'in_progress', arrangement_id: 3, started_at: '2026-07-14T10:00:00+02:00', assignees: [] },
+						{ id: 2, task_number: 'A-2', title: 'Hører til et IKKE-aktivt arrangement', status: 'in_progress', arrangement_id: 99, started_at: '2026-07-14T10:00:00+02:00', assignees: [] },
+					],
+				}),
+			};
+		}
+		if (url.pathname.endsWith('/shifts')) {
+			return { ok: true, status: 200, json: async () => ({ success: true, data: [] }) };
+		}
+		throw new Error('uventet sti: ' + url.pathname);
+	};
+
+	try {
+		const config = { ...baseConfig, apiMode: 'live', wpBaseUrl: 'https://example.invalid', wpApiNamespace: '/wp-json/wp-community/v1', wpUsername: 'u', wpApplicationPassword: 'p', fetchTimeoutMs: 1000, arrangementId: null };
+		const adapterInstance = adapter.createAdapter(config);
+
+		const [inProgress, completed, shifts] = await Promise.all([
+			adapterInstance.fetchInProgressTasks(),
+			adapterInstance.fetchCompletedTasks(),
+			adapterInstance.fetchShifts(),
+		]);
+
+		assert.deepEqual(inProgress.map((t) => t.taskNumber), ['A-1']);
+		assert.deepEqual(completed, []);
+		assert.deepEqual(shifts, []);
+		assert.equal(arrangementsCallCount, 1, '/arrangements skal kun kaldes én gang, delt mellem de tre parallelle kald');
+	} finally {
+		global.fetch = originalFetch;
+	}
+});
+
+test('createAdapter (live, ARRANGEMENT_ID sat): kalder aldrig /arrangements, sender arrangement_id direkte som parameter', async () => {
+	const originalFetch = global.fetch;
+	let arrangementsCalled = false;
+
+	global.fetch = async (url) => {
+		if (url.pathname.endsWith('/arrangements')) arrangementsCalled = true;
+		assert.equal(url.searchParams.get('arrangement_id'), '3');
+		return { ok: true, status: 200, json: async () => ({ success: true, data: [] }) };
+	};
+
+	try {
+		const config = { ...baseConfig, apiMode: 'live', wpBaseUrl: 'https://example.invalid', wpApiNamespace: '/wp-json/wp-community/v1', wpUsername: 'u', wpApplicationPassword: 'p', fetchTimeoutMs: 1000, arrangementId: 3 };
+		const adapterInstance = adapter.createAdapter(config);
+		await adapterInstance.fetchInProgressTasks();
+		assert.equal(arrangementsCalled, false);
+	} finally {
+		global.fetch = originalFetch;
+	}
+});
