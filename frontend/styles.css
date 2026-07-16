@@ -25,6 +25,15 @@
 	box-sizing: border-box;
 }
 
+/* [2026-07-16, bugfix] Flere elementer herunder (.list, .empty-message,
+   .page-indicator) sætter deres egen "display: flex" ubetinget — uden denne
+   regel taber det native [hidden]-attribut mod dem afhængig af regel-
+   rækkefølge/specificitet, og et tomt-panel kan derfor vise BÅDE rigtige
+   rækker og "Ingen X"-teksten samtidig (set live på faktisk Pi-hardware). */
+[hidden] {
+	display: none !important;
+}
+
 html {
 	font-size: 22px;
 }

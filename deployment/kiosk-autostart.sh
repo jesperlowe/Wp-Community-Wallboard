@@ -83,11 +83,12 @@ while true; do
 		"${CHROMIUM_PLATFORM_FLAGS[@]}" \
 		--kiosk \
 		--incognito \
+		--lang=da \
 		--noerrdialogs \
 		--disable-infobars \
 		--disable-session-crashed-bubble \
 		--disable-translate \
-		--disable-features=TranslateUI \
+		--disable-features=Translate,TranslateUI \
 		--overscroll-history-navigation=0 \
 		--check-for-update-interval=31536000 \
 		--no-first-run \
