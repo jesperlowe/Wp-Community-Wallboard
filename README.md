@@ -259,6 +259,42 @@ Wallboardet er **ikke** afhængigt af at Cockpit er åbent — kiosk-scriptet
 rører kun ved browseren, ikke wallboard-servicen (den styres af systemd
 uafhængigt af enhver desktop-session).
 
+### Kiosk mode uden skrivebordsmiljø (Raspberry Pi OS Lite)
+
+Kører Pi'en headless (`Raspberry Pi OS Lite`, `systemctl get-default` viser
+`multi-user.target`), er der intet X11/skrivebord til `LXDE-pi/autostart`
+ovenfor. Et fuldt skrivebordsmiljø er unødvendigt tungt til at vise én
+fastlåst browser — brug i stedet [`cage`](https://github.com/cage-kiosk/cage),
+en minimal Wayland-kiosk-compositor lavet præcis til dette formål:
+
+```bash
+sudo apt update
+sudo apt install -y cage chromium
+sudo raspi-config   # System Options → Boot / Auto Login → Console Autologin
+
+cat >> ~/.bash_profile <<'EOF'
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+  exec cage -X -- /opt/wallboard/deployment/kiosk-autostart.sh
+fi
+EOF
+
+sudo reboot
+```
+
+`-X` starter en indlejret Xwayland, så Chromium kører i sin almindelige,
+velafprøvede X11-tilstand frem for den mere version-sarte native
+Wayland-vej. Ved at pege cage på `kiosk-autostart.sh` (i stedet for
+Chromium direkte) genbruges hele `/health`-ventelogikken,
+chromium/chromium-browser-detektionen og genstarts-løkken uændret.
+
+`xset`-kaldene i `kiosk-autostart.sh` er X11-specifikke og fejler stille
+(`|| true`) under Wayland/cage — tilføj i stedet `consoleblank=0` til
+`/boot/firmware/cmdline.txt` for at forhindre skærmen i at gå i sort.
+
+For at komme tilbage til en terminal: SSH ind udefra (upåvirket af tty1's
+session) — `pkill cage` stopper kiosken, og tty1 logger automatisk ind og
+starter den igen (`.bash_profile`s `exec`-linje kører igen).
+
 ## LAN-adgang
 
 Som standard er wallboardet kun tilgængeligt på selve Raspberry Pi'en
