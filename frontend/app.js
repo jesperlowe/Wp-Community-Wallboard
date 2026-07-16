@@ -78,6 +78,32 @@
 		return isNaN(d.getTime()) ? null : d;
 	}
 
+	function dayKey(date) {
+		return date.getFullYear() + '-' + date.getMonth() + '-' + date.getDate();
+	}
+
+	function addDays(date, days) {
+		var copy = new Date(date);
+		copy.setDate(copy.getDate() + days);
+		return copy;
+	}
+
+	// [2026-07-16] "Afsluttet"/"Kommende"-panelerne dækker et rullende
+	// 24-timers-vindue (ikke strengt kalenderdag), og "Igangværende" har
+	// ingen øvre grænse for hvor længe siden en opgave startede — et bart
+	// klokkeslæt kan derfor være reelt tvetydigt (i går kl. 23.30 vs. i dag
+	// kl. 23.30). Viser kun en dags-markør når det faktisk er nødvendigt (ikke
+	// i dag), for ikke at fylde hver eneste række med en dato i det langt
+	// hyppigste tilfælde.
+	function relativeDayPrefix(date) {
+		var now = new Date();
+		var key = dayKey(date);
+		if (key === dayKey(now)) return '';
+		if (key === dayKey(addDays(now, -1))) return 'i går ';
+		if (key === dayKey(addDays(now, 1))) return 'i morgen ';
+		return date.getDate() + '/' + (date.getMonth() + 1) + ' ';
+	}
+
 	/** Blød opdatering: kort opacity-fade i stedet for et hårdt indholds-skift. */
 	function fadeSwap(container, renderFn) {
 		container.style.opacity = '0';
@@ -170,7 +196,10 @@
 		if (Array.isArray(task.assignedNames) && task.assignedNames.length > 0) {
 			meta.appendChild(el('span', 'row-assignee', task.assignedNames.join(', ')));
 		}
-		var timeText = timeValueIso ? timeLabel + ' ' + formatClock(new Date(timeValueIso)) : timeLabel + ' –';
+		var timeDate = timeValueIso ? new Date(timeValueIso) : null;
+		var timeText = timeDate
+			? timeLabel + ' ' + relativeDayPrefix(timeDate) + formatClock(timeDate)
+			: timeLabel + ' –';
 		meta.appendChild(el('span', 'row-time', timeText));
 		row.appendChild(meta);
 
