@@ -144,6 +144,41 @@ test('Ved netværksfejl mod WordPress falder serveren tilbage til disk-cachen og
 	}
 });
 
+test('Ved fejl på allerførste hentning (ingen disk-cache endnu) er generatedAt/cacheAgeSeconds null, ikke en vildledende "0 sekunder"', async () => {
+	// Regressionstest for en bug hvor cacheAgeSeconds faldt tilbage til 0
+	// (i stedet for null) når der slet ingen data var hentet endnu — det
+	// fik frontenden til modstridende at vise "Offline" sammen med "0
+	// sekunder siden", som om data lige var hentet friskt.
+	const config = baseTestConfig({
+		apiMode: 'live',
+		wpBaseUrl: 'http://127.0.0.1:1',
+		wpUsername: 'wallboard',
+		wpApplicationPassword: 'x',
+		fetchTimeoutMs: 1500,
+		// cachePath peger på en mappe der aldrig er skrevet til — ingen fil at falde tilbage på.
+	});
+	const instance = createServer(config);
+
+	try {
+		await instance.start();
+		await instance.refreshOnce();
+
+		const port = instance.httpServer.address().port;
+		const { body } = await getJson(`http://127.0.0.1:${port}/api/wallboard`);
+
+		assert.equal(body.stale, true);
+		assert.equal(body.sourceStatus, 'offline');
+		assert.equal(body.generatedAt, null);
+		assert.equal(body.cacheAgeSeconds, null);
+		assert.deepEqual(body.tasks.inProgress, []);
+		assert.deepEqual(body.tasks.completed, []);
+		assert.deepEqual(body.shifts, []);
+	} finally {
+		await instance.stop();
+		fs.rmSync(path.dirname(config.cachePath), { recursive: true, force: true });
+	}
+});
+
 // ---- config.js: HTTPS-håndhævelse (rent funktionstjek, ingen server nødvendig) ----
 
 test('validateWpBaseUrl: afviser usikret ekstern URL, accepterer HTTPS og lokale hosts', () => {

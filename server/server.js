@@ -89,16 +89,23 @@ function createServer(config) {
 		if (typeof refreshTimer.unref === 'function') refreshTimer.unref();
 	}
 
+	// [2026-07-16, bugfix] Da fetchedMs faldt tilbage til "nu" når der slet
+	// ingen vellykket hentning (og ingen disk-cache) fandtes endnu, viste
+	// frontenden det modstridende "Offline · 0 sekunder siden" — som om der
+	// var friske data, når der reelt ingen var. state.lastFetchAt er null i
+	// netop det tilfælde (se refreshOnce()), så generatedAt/cacheAgeSeconds
+	// er nu eksplicit null i stedet for at foregive en tidsstempel der ikke
+	// findes — frontenden viser i stedet "ingen data endnu".
 	function buildWallboardResponse() {
 		const nowMs = Date.now();
 		const payload = state.lastGoodPayload || { tasks: { inProgress: [], completed: [] }, shifts: [] };
-		const fetchedMs = state.lastFetchAt ? state.lastFetchAt.getTime() : nowMs;
+		const fetchedMs = state.lastFetchAt ? state.lastFetchAt.getTime() : null;
 
 		return {
-			generatedAt: time.formatInstantIso(fetchedMs, config.timezone),
+			generatedAt: fetchedMs !== null ? time.formatInstantIso(fetchedMs, config.timezone) : null,
 			stale: !state.lastFetchOk,
 			sourceStatus: state.lastFetchOk ? 'online' : 'offline',
-			cacheAgeSeconds: Math.max(0, Math.round((nowMs - fetchedMs) / 1000)),
+			cacheAgeSeconds: fetchedMs !== null ? Math.max(0, Math.round((nowMs - fetchedMs) / 1000)) : null,
 			tasks: payload.tasks,
 			shifts: payload.shifts,
 		};

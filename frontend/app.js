@@ -230,7 +230,6 @@
 	var lastUpdatedTime = document.getElementById('last-updated-time');
 	var updatingDot = document.getElementById('updating-dot');
 	var offlineBanner = document.getElementById('offline-banner');
-	var cacheAgeEl = document.getElementById('cache-age');
 
 	function updateMeta(json) {
 		var online = json.sourceStatus === 'online' && !json.stale;
@@ -241,13 +240,22 @@
 		lastUpdatedTime.textContent = generated ? formatClockSeconds(generated) : '–';
 	}
 
+	// [2026-07-16] cacheAgeSeconds er null (ikke 0) når der slet ingen data
+	// er hentet endnu (frisk installation, ingen disk-cache, endnu intet
+	// vellykket kald til WordPress) — se server.js' buildWallboardResponse().
+	// Skal vises tydeligt forskelligt fra "0 sekunder siden", ellers ser det
+	// modstridende ud ("Offline" + "lige hentet").
 	function updateOfflineBanner(json) {
-		if (json.stale) {
-			offlineBanner.hidden = false;
-			cacheAgeEl.textContent = formatAge(json.cacheAgeSeconds);
-		} else {
+		if (!json.stale) {
 			offlineBanner.hidden = true;
+			return;
 		}
+
+		offlineBanner.hidden = false;
+		offlineBanner.textContent =
+			json.cacheAgeSeconds === null || json.cacheAgeSeconds === undefined
+				? 'Offline – ingen data modtaget fra WordPress endnu'
+				: 'Offline – viser senest hentede data · ' + formatAge(json.cacheAgeSeconds);
 	}
 
 	function setUpdating(isUpdating) {
