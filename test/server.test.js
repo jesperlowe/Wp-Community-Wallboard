@@ -28,7 +28,10 @@ function baseTestConfig(overrides) {
 			completedTaskLimit: 10,
 			completedLookbackHours: 24,
 			shiftLookaheadHours: 24,
+			upcomingTaskLimit: 10,
+			upcomingLookaheadHours: 24,
 			showAssignees: true,
+			showShiftNames: false,
 			arrangementId: null,
 			cachePath: tempCachePath(),
 			fetchTimeoutMs: 2000,
@@ -58,8 +61,16 @@ test('GET /api/wallboard (mock-mode): svarer med det rensede wallboard-format, i
 		assert.equal(body.sourceStatus, 'online');
 		assert.ok(Array.isArray(body.tasks.inProgress));
 		assert.ok(Array.isArray(body.tasks.completed));
+		assert.ok(Array.isArray(body.tasks.upcoming));
 		assert.ok(Array.isArray(body.shifts));
 		assert.ok(body.tasks.inProgress.length > 0, 'mock-data bør give mindst én igangværende opgave');
+		assert.ok(body.tasks.upcoming.length > 0, 'mock-data bør give mindst én kommende opgave');
+
+		// SHOW_SHIFT_NAMES er ikke sat i baseTestConfig() — deltagernavne skal
+		// derfor være fuldstændig fraværende, ikke bare en tom liste.
+		for (const shift of body.shifts) {
+			assert.equal(Object.prototype.hasOwnProperty.call(shift, 'participantNames'), false);
+		}
 
 		const raw = JSON.stringify(body);
 		for (const forbidden of ['contact_phone', 'pickup_address', 'delivery_address', 'application_password', 'WP_APPLICATION_PASSWORD', 'description', 'assigned_vehicle']) {

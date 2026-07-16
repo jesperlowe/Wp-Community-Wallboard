@@ -117,14 +117,35 @@ function extractAssignedNames(raw) {
 	return legacy ? [legacy] : [];
 }
 
+/** Første "ord" af et fuldt navn — aldrig efternavn/øvrige navne. */
+function firstName(fullName) {
+	const trimmed = toStr(fullName);
+	if (!trimmed) return '';
+	return trimmed.split(/\s+/)[0];
+}
+
+/**
+ * Fornavne på ikke-annullerede vagtdeltagere — kun kaldt når SHOW_SHIFT_NAMES=true
+ * (se getRawShifts()' include_users-parameter). Bevidst kun fornavn, aldrig
+ * fulde navne eller bruger-id'er — se README.md's sikkerhedsafsnit.
+ */
+function extractShiftFirstNames(raw) {
+	const users = Array.isArray(raw.users) ? raw.users : [];
+	const names = users
+		.filter((u) => u && u.status !== 'cancelled')
+		.map((u) => firstName(u && u.name));
+	return uniqueNonEmpty(names);
+}
+
 // ---- Mapping: opgaver ---------------------------------------------------
 
 /**
- * @param {'in_progress'|'completed'} bucketStatus Statussen listen repræsenterer.
- *   Bruges i stedet for opgavens rå status-kolonne, fordi multi-assignee-opgaver
- *   kan have status='assigned' på selve opgaven, mens den reelt vises i
- *   "igangværende" fordi én assignee er i gang (se WPC_Tasks::get_tasks()'
- *   OR-logik mod assignments-tabellen i det virkelige API).
+ * @param {'in_progress'|'completed'|'planned'} bucketStatus Statussen listen
+ *   repræsenterer. Bruges i stedet for opgavens rå status-kolonne, fordi
+ *   multi-assignee-opgaver kan have status='assigned' på selve opgaven, mens
+ *   den reelt vises i "igangværende" fordi én assignee er i gang (se
+ *   WPC_Tasks::get_tasks()' OR-logik mod assignments-tabellen i det
+ *   virkelige API).
  */
 function mapTask(raw, config, bucketStatus) {
 	if (!raw || typeof raw !== 'object') return null;
@@ -144,6 +165,11 @@ function mapTask(raw, config, bucketStatus) {
 			? raw.assignees.find((a) => a && a.status === 'in_progress' && a.started_at)
 			: null;
 		task.startedAt = toIsoOrNull(raw.started_at) || toIsoOrNull(assigneeStart && assigneeStart.started_at) || toIsoOrNull(raw.created_at);
+	} else if (bucketStatus === 'planned') {
+		// "Kommende" — tidspunktet er enten en eksplicit aftaletid eller en
+		// deadline; aftaletid prioriteres, da den beskriver hvornår opgaven
+		// reelt skal udføres (deadline er blot en frist, ikke et tidspunkt).
+		task.scheduledAt = toIsoOrNull(raw.appointment_time) || toIsoOrNull(raw.due_date);
 	} else {
 		const assigneeStop = Array.isArray(raw.assignees)
 			? raw.assignees.filter((a) => a && a.stopped_at).sort((a, b) => Date.parse(b.stopped_at) - Date.parse(a.stopped_at))[0]
@@ -187,6 +213,28 @@ function sortInProgress(mappedTasks) {
 	});
 }
 
+/**
+ * Kun opgaver med en aftaletid/deadline i intervallet ]nu, nu + UPCOMING_LOOKAHEAD_HOURS] —
+ * opgaver uden noget tidspunkt sat, eller hvis tidspunkt allerede er passeret,
+ * hører ikke hjemme i "kommende". Nærmeste tidspunkt først, begrænset til
+ * UPCOMING_TASK_LIMIT.
+ */
+function filterAndSortUpcoming(mappedTasks, config, nowMs = Date.now()) {
+	const lookaheadMs = config.upcomingLookaheadHours * 60 * 60 * 1000;
+	const horizon = nowMs + lookaheadMs;
+
+	const kept = mappedTasks.filter((t) => {
+		if (!t.scheduledAt) return false;
+		const scheduledMs = Date.parse(t.scheduledAt);
+		if (!Number.isFinite(scheduledMs)) return false;
+		return scheduledMs > nowMs && scheduledMs <= horizon;
+	});
+
+	kept.sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt));
+
+	return kept.slice(0, config.upcomingTaskLimit);
+}
+
 // ---- Mapping: vagter ------------------------------------------------------
 
 function mapShift(raw, config) {
@@ -209,13 +257,19 @@ function mapShift(raw, config) {
 		endTime = time.combineDateTime(time.addDays(shiftDate, 1), toStr(raw.end_time, '00:00:00'), config.timezone);
 	}
 
-	return {
+	const shift = {
 		id,
 		title: toStr(raw.title, 'Vagt'),
 		startTime,
 		endTime,
 		status: toStr(raw.status, 'unknown'),
 	};
+
+	if (config.showShiftNames) {
+		shift.participantNames = extractShiftFirstNames(raw);
+	}
+
+	return shift;
 }
 
 /** Kun vagter der er i gang eller ligger forude; aktuelle før kommende (se planens begrundelse). */
@@ -295,6 +349,13 @@ function createAdapter(config) {
 		return filterToActiveArrangements(raw, activeIds);
 	}
 
+	async function getRawUpcomingTasks() {
+		if (isMock) return mockData.mockUpcomingTasksResponse().data;
+		const activeIds = await getActiveArrangementIds();
+		const raw = await wpFetch(config, '/tasks', { scope: 'all', status: 'planned', arrangement_id: config.arrangementId });
+		return filterToActiveArrangements(raw, activeIds);
+	}
+
 	async function getRawShifts() {
 		const nowMs = Date.now();
 		const from = time.todayInTimezone(config.timezone);
@@ -305,7 +366,7 @@ function createAdapter(config) {
 		const raw = await wpFetch(config, '/shifts', {
 			from,
 			to,
-			include_users: 0,
+			include_users: config.showShiftNames ? 1 : 0,
 			arrangement_id: config.arrangementId,
 		});
 		return filterToActiveArrangements(raw, activeIds);
@@ -323,13 +384,19 @@ function createAdapter(config) {
 		return filterAndSortCompleted(mapped, config);
 	}
 
+	async function fetchUpcomingTasks() {
+		const raw = await getRawUpcomingTasks();
+		const mapped = raw.map((r) => mapTask(r, config, 'planned')).filter(Boolean);
+		return filterAndSortUpcoming(mapped, config);
+	}
+
 	async function fetchShifts() {
 		const raw = await getRawShifts();
 		const mapped = raw.map((r) => mapShift(r, config)).filter(Boolean);
 		return filterAndSortShifts(mapped);
 	}
 
-	return { fetchInProgressTasks, fetchCompletedTasks, fetchShifts };
+	return { fetchInProgressTasks, fetchCompletedTasks, fetchUpcomingTasks, fetchShifts };
 }
 
 module.exports = {
@@ -339,7 +406,9 @@ module.exports = {
 	mapShift,
 	filterAndSortCompleted,
 	filterAndSortShifts,
+	filterAndSortUpcoming,
 	sortInProgress,
 	extractAssignedNames,
+	extractShiftFirstNames,
 	filterToActiveArrangements,
 };

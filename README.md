@@ -60,7 +60,10 @@ Kopiér `.env.example` til `.env` og udfyld:
 | `COMPLETED_TASK_LIMIT` | Maks. antal opgaver i "Afsluttet seneste N timer"-panelet. |
 | `COMPLETED_LOOKBACK_HOURS` | En afsluttet opgave vises hvis den er afsluttet i dag ELLER inden for dette antal timer. |
 | `SHIFT_LOOKAHEAD_HOURS` | Hvor langt frem i tiden der hentes vagter. |
+| `UPCOMING_TASK_LIMIT` | Maks. antal opgaver i "Kommende opgaver næste N timer"-panelet. |
+| `UPCOMING_LOOKAHEAD_HOURS` | En opgave (status `planned`) vises i "Kommende", hvis dens aftaletid/deadline falder inden for dette antal timer frem. |
 | `SHOW_ASSIGNEES` | `false` udelader `assignedNames` fra opgaver helt (ikke bare en tom liste). |
+| `SHOW_SHIFT_NAMES` | `true` viser deltagernes **fornavne** (aldrig fulde navne/bruger-id'er) i vagt-panelet. Standard `false` — vagter viser som udgangspunkt ingen deltagere, jf. sikkerhedsafsnittet. |
 | `ARRANGEMENT_ID` | Tomt (standard): vis data for **alle arrangementer med status `active`** — wallboardet slår selv `GET /arrangements?status=active` op ved hver opdatering. Sæt til et bestemt tal for i stedet kun at vise ét fast arrangement. **I begge tilfælde** skal `WP_USERNAME`-kontoen være tilføjet som deltager i de(t) relevante arrangement(er) i wp-admin (Arrangementer → rediger → Deltagere) — ellers filtrerer WordPress dem fra uanset kontoens `wpc_*`-rettigheder. |
 | `API_MODE` | `mock` for udvikling uden WordPress, ellers `live` (default). |
 
@@ -87,19 +90,32 @@ som udelukkende bygger sit output via allowlisting (aldrig `{...raw}`).
     "completed": [
       { "id": 122, "taskNumber": "WPC-0122", "title": "Afhentning", "status": "completed",
         "completedAt": "2026-07-14T11:30:00+02:00", "assignedNames": ["Navn"] }
+    ],
+    "upcoming": [
+      { "id": 130, "taskNumber": "WPC-0130", "title": "Klargøring af scene", "status": "planned",
+        "scheduledAt": "2026-07-14T18:00:00+02:00", "assignedNames": ["Navn"] }
     ]
   },
   "shifts": [
     { "id": 45, "title": "Aftenvagt", "startTime": "2026-07-14T18:00:00+02:00",
-      "endTime": "2026-07-14T22:00:00+02:00", "status": "open" }
+      "endTime": "2026-07-14T22:00:00+02:00", "status": "open",
+      "participantNames": ["Mikkel", "Sofie"] }
   ]
 }
 ```
 
 `stale: true` betyder data kommer fra disk-cachen (`/var/lib/wallboard/cache.json`),
 fordi WordPress lige nu er utilgængeligt — `cacheAgeSeconds` fortæller hvor
-gammel den cachede data er. `assignedNames` udelades helt fra en opgave når
-`SHOW_ASSIGNEES=false`.
+gammel den cachede data er. Har wallboardet ALDRIG hentet data succesfuldt
+endnu (frisk installation, ingen disk-cache), er `generatedAt`/`cacheAgeSeconds`
+begge `null` i stedet for en vildledende værdi.
+
+`assignedNames` udelades helt fra en opgave når `SHOW_ASSIGNEES=false`.
+`upcoming` er opgaver med status `planned` og en aftaletid/deadline
+(`appointment_time`/`due_date`) inden for `UPCOMING_LOOKAHEAD_HOURS` timer —
+`scheduledAt` er den af de to der er sat (aftaletid prioriteret). `shifts[].participantNames`
+findes kun (og er da altid fornavne, aldrig fulde navne) når `SHOW_SHIFT_NAMES=true`
+— som standard er feltet fuldstændig fraværende, matcher "ingen deltagere vises".
 
 ### `GET /health`
 
@@ -374,7 +390,9 @@ dato-filtrering af afsluttede opgaver, og sortering af vagter.
   eksplicit navngivne, ufarlige felter kommer med i `/api/wallboard`-svaret.
   Følgende sendes ALDRIG til wallboardet: telefonnummer, kontaktperson,
   adresse, GPS-koordinater, opgavebeskrivelse, interne noter, loghistorik,
-  vagtbeskrivelse, vagtdeltagere, bruger-ID'er, Application Password.
+  vagtbeskrivelse, bruger-ID'er, Application Password. Vagtdeltagere er som
+  standard også fraværende — kun **fornavne** kan valgfrit vises via
+  `SHOW_SHIFT_NAMES=true` (aldrig fulde navne, roller eller bruger-ID'er).
 - `WP_BASE_URL` skal være HTTPS for eksterne hosts (håndhævet i `server/config.js`).
 - Wallboardet er read-only: ingen oprettelse/redigering af opgaver, ingen
   tilmelding til vagter, intet login, ingen visning af opgavedetaljer eller

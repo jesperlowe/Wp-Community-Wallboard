@@ -35,7 +35,7 @@ function createServer(config) {
 	const adapter = createAdapter(config);
 
 	const state = {
-		lastGoodPayload: null, // { tasks: { inProgress, completed }, shifts }
+		lastGoodPayload: null, // { tasks: { inProgress, completed, upcoming }, shifts }
 		lastFetchAt: null, // Date
 		lastFetchOk: false,
 		consecutiveFailures: 0,
@@ -46,13 +46,14 @@ function createServer(config) {
 
 	async function refreshOnce() {
 		try {
-			const [inProgress, completed, shifts] = await Promise.all([
+			const [inProgress, completed, upcoming, shifts] = await Promise.all([
 				adapter.fetchInProgressTasks(),
 				adapter.fetchCompletedTasks(),
+				adapter.fetchUpcomingTasks(),
 				adapter.fetchShifts(),
 			]);
 
-			state.lastGoodPayload = { tasks: { inProgress, completed }, shifts };
+			state.lastGoodPayload = { tasks: { inProgress, completed, upcoming }, shifts };
 			state.lastFetchAt = new Date();
 			state.lastFetchOk = true;
 			state.consecutiveFailures = 0;
@@ -98,7 +99,7 @@ function createServer(config) {
 	// findes — frontenden viser i stedet "ingen data endnu".
 	function buildWallboardResponse() {
 		const nowMs = Date.now();
-		const payload = state.lastGoodPayload || { tasks: { inProgress: [], completed: [] }, shifts: [] };
+		const payload = state.lastGoodPayload || { tasks: { inProgress: [], completed: [], upcoming: [] }, shifts: [] };
 		const fetchedMs = state.lastFetchAt ? state.lastFetchAt.getTime() : null;
 
 		return {
@@ -126,6 +127,8 @@ function createServer(config) {
 			refreshSeconds: config.refreshSeconds,
 			completedTaskLimit: config.completedTaskLimit,
 			completedLookbackHours: config.completedLookbackHours,
+			upcomingTaskLimit: config.upcomingTaskLimit,
+			upcomingLookaheadHours: config.upcomingLookaheadHours,
 			pageIntervalSeconds: PAGE_INTERVAL_SECONDS,
 		};
 		const script = `<script>window.WALLBOARD_CONFIG = ${JSON.stringify(publicConfig)};</script>`;

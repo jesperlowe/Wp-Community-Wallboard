@@ -5,16 +5,22 @@
 		refreshSeconds: 30,
 		completedTaskLimit: 10,
 		completedLookbackHours: 24,
+		upcomingTaskLimit: 10,
+		upcomingLookaheadHours: 24,
 		pageIntervalSeconds: 10,
 	};
 
 	var FETCH_TIMEOUT_MS = 8000;
 	var MAX_BACKOFF_MULTIPLIER = 10;
 
+	// [2026-07-16] Reduceret i takt med at layoutet gik fra "ét fuldt panel +
+	// to halve" til fire lige store paneler i et 2×2-gitter — hvert panel har
+	// nu ca. et kvart skærmbillede i stedet for op til et halvt.
 	var PAGE_SIZE = {
-		inProgress: 6,
-		completed: 5,
-		shifts: 4,
+		inProgress: 4,
+		completed: 4,
+		upcoming: 4,
+		shifts: 3,
 	};
 
 	var statusMap = window.WallboardStatusMap || {
@@ -181,11 +187,21 @@
 		return buildTaskRow(task, 'Afsluttet', task.completedAt);
 	}
 
+	function renderUpcomingRow(task) {
+		return buildTaskRow(task, 'Planlagt', task.scheduledAt);
+	}
+
 	function renderShiftRow(shift) {
 		var row = el('div', 'row');
 
 		var main = el('div', 'row-main');
 		main.appendChild(el('span', 'row-title', shift.title || 'Vagt'));
+		// [2026-07-16] Kun til stede når SHOW_SHIFT_NAMES=true (se
+		// server/wordpress-adapter.js' mapShift()) — udelades ellers helt,
+		// matcher den oprindelige "ingen deltagere vises"-standard.
+		if (Array.isArray(shift.participantNames) && shift.participantNames.length > 0) {
+			main.appendChild(el('span', 'row-participants', shift.participantNames.join(', ')));
+		}
 		row.appendChild(main);
 
 		var start = safeDate(shift.startTime);
@@ -201,7 +217,7 @@
 		return row;
 	}
 
-	// ---- Opsætning af de tre paneler ---------------------------------------
+	// ---- Opsætning af de fire paneler ---------------------------------------
 
 	var inProgressPaginator = createPaginator(
 		document.getElementById('inprogress-list'),
@@ -215,6 +231,13 @@
 		document.getElementById('completed-empty'),
 		document.getElementById('completed-page-indicator'),
 		renderCompletedRow
+	);
+
+	var upcomingPaginator = createPaginator(
+		document.getElementById('upcoming-list'),
+		document.getElementById('upcoming-empty'),
+		document.getElementById('upcoming-page-indicator'),
+		renderUpcomingRow
 	);
 
 	var shiftsPaginator = createPaginator(
@@ -265,7 +288,7 @@
 
 	// ---- Data-polling med eksponentiel backoff ved fejl -----------------------
 
-	var lastRenderedJson = { inProgress: null, completed: null, shifts: null };
+	var lastRenderedJson = { inProgress: null, completed: null, upcoming: null, shifts: null };
 	var fetchFailures = 0;
 	var fetchTimer = null;
 
@@ -276,6 +299,7 @@
 		var tasks = json.tasks || {};
 		var inProgress = Array.isArray(tasks.inProgress) ? tasks.inProgress : [];
 		var completed = Array.isArray(tasks.completed) ? tasks.completed : [];
+		var upcoming = Array.isArray(tasks.upcoming) ? tasks.upcoming : [];
 		var shifts = Array.isArray(json.shifts) ? json.shifts : [];
 
 		var ipKey = JSON.stringify(inProgress);
@@ -288,6 +312,12 @@
 		if (cpKey !== lastRenderedJson.completed) {
 			lastRenderedJson.completed = cpKey;
 			completedPaginator.setItems(completed, PAGE_SIZE.completed);
+		}
+
+		var upKey = JSON.stringify(upcoming);
+		if (upKey !== lastRenderedJson.upcoming) {
+			lastRenderedJson.upcoming = upKey;
+			upcomingPaginator.setItems(upcoming, PAGE_SIZE.upcoming);
 		}
 
 		var shKey = JSON.stringify(shifts);
@@ -363,14 +393,23 @@
 		heading.textContent = 'Afsluttet seneste ' + hours + ' timer';
 	}
 
+	/** Samme begrundelse som setCompletedHeading() — se dens kommentar. */
+	function setUpcomingHeading() {
+		var heading = document.getElementById('upcoming-heading');
+		var hours = CONFIG.upcomingLookaheadHours || 24;
+		heading.textContent = 'Kommende opgaver næste ' + hours + ' timer';
+	}
+
 	function init() {
 		tickClock();
 		setInterval(tickClock, 1000);
 		setCompletedHeading();
+		setUpcomingHeading();
 
 		var pageIntervalMs = (CONFIG.pageIntervalSeconds || 10) * 1000;
 		inProgressPaginator.start(pageIntervalMs);
 		completedPaginator.start(pageIntervalMs);
+		upcomingPaginator.start(pageIntervalMs);
 		shiftsPaginator.start(pageIntervalMs);
 
 		fetchData();

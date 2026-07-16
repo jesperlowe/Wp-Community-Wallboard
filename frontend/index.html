@@ -24,7 +24,7 @@
 
 	<div class="offline-banner" id="offline-banner" hidden></div>
 
-	<main class="board">
+	<main class="board board-grid">
 		<section class="panel panel-inprogress">
 			<h2 class="panel-heading">Igangværende opgaver</h2>
 			<div class="list" id="inprogress-list"></div>
@@ -32,20 +32,25 @@
 			<div class="page-indicator" id="inprogress-page-indicator" hidden></div>
 		</section>
 
-		<section class="panel-column">
-			<section class="panel panel-completed">
-				<h2 class="panel-heading" id="completed-heading">Afsluttet i dag</h2>
-				<div class="list" id="completed-list"></div>
-				<p class="empty-message" id="completed-empty" hidden>Ingen afsluttede opgaver</p>
-				<div class="page-indicator" id="completed-page-indicator" hidden></div>
-			</section>
+		<section class="panel panel-upcoming">
+			<h2 class="panel-heading" id="upcoming-heading">Kommende opgaver</h2>
+			<div class="list" id="upcoming-list"></div>
+			<p class="empty-message" id="upcoming-empty" hidden>Ingen kommende opgaver</p>
+			<div class="page-indicator" id="upcoming-page-indicator" hidden></div>
+		</section>
 
-			<section class="panel panel-shifts">
-				<h2 class="panel-heading">Vagter</h2>
-				<div class="list" id="shifts-list"></div>
-				<p class="empty-message" id="shifts-empty" hidden>Ingen vagter</p>
-				<div class="page-indicator" id="shifts-page-indicator" hidden></div>
-			</section>
+		<section class="panel panel-completed">
+			<h2 class="panel-heading" id="completed-heading">Afsluttet i dag</h2>
+			<div class="list" id="completed-list"></div>
+			<p class="empty-message" id="completed-empty" hidden>Ingen afsluttede opgaver</p>
+			<div class="page-indicator" id="completed-page-indicator" hidden></div>
+		</section>
+
+		<section class="panel panel-shifts">
+			<h2 class="panel-heading">Vagter</h2>
+			<div class="list" id="shifts-list"></div>
+			<p class="empty-message" id="shifts-empty" hidden>Ingen vagter</p>
+			<div class="page-indicator" id="shifts-page-indicator" hidden></div>
 		</section>
 	</main>
 

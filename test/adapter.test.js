@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const adapter = require('../server/wordpress-adapter');
 const mockData = require('../server/mock-data');
+const time = require('../server/time');
 
 const baseConfig = {
 	timezone: 'Europe/Copenhagen',
@@ -15,14 +16,15 @@ const baseConfig = {
 };
 
 test('mapTask: mapper en normal igangværende opgave korrekt og udelader følsomme felter', () => {
-	const raw = mockData.mockInProgressTasksResponse().data[0]; // WPC-0231
+	const nowMs = Date.now();
+	const raw = mockData.mockInProgressTasksResponse(nowMs).data[0]; // WPC-0231
 	const mapped = adapter.mapTask(raw, baseConfig, 'in_progress');
 
 	assert.equal(mapped.id, 231);
 	assert.equal(mapped.taskNumber, 'WPC-0231');
 	assert.equal(mapped.title, 'Levering af telte til hovedplads');
 	assert.equal(mapped.status, 'in_progress');
-	assert.equal(mapped.startedAt, '2026-07-14T11:45:00+02:00');
+	assert.equal(mapped.startedAt, raw.started_at);
 	assert.deepEqual(mapped.assignedNames, ['Mikkel Rasmussen']);
 
 	const forbidden = [
@@ -36,20 +38,22 @@ test('mapTask: mapper en normal igangværende opgave korrekt og udelader følsom
 });
 
 test('mapTask: multi-assignee opgave henter navn fra assignees[], ikke legacy-feltet alene', () => {
-	const raw = mockData.mockInProgressTasksResponse().data[1]; // WPC-0219
+	const nowMs = Date.now();
+	const raw = mockData.mockInProgressTasksResponse(nowMs).data[1]; // WPC-0219
 	const mapped = adapter.mapTask(raw, baseConfig, 'in_progress');
 
 	assert.deepEqual(mapped.assignedNames.sort(), ['Peter Sørensen', 'Sofie Jensen'].sort());
 	// startedAt skal falde tilbage til den aktive assignees started_at, når opgavens
 	// eget started_at-felt er sat forkert/mangler i multi-assignee-tilfælde.
-	assert.equal(mapped.startedAt, '2026-07-14T10:20:00+02:00');
+	assert.equal(mapped.startedAt, raw.started_at);
 });
 
 test('mapTask: håndterer tal leveret som strenge uden at fejle', () => {
-	const raw = mockData.mockCompletedTasksResponse().data[1]; // duration_seconds: '3300', id er number her men vi tester string-id separat
+	const nowMs = Date.now();
+	const raw = mockData.mockCompletedTasksResponse(nowMs).data[1]; // duration_seconds: '3300', id er number her men vi tester string-id separat
 	const mapped = adapter.mapTask(raw, baseConfig, 'completed');
 	assert.equal(mapped.id, 118);
-	assert.equal(mapped.completedAt, '2026-07-14T09:55:00+02:00');
+	assert.equal(mapped.completedAt, raw.completed_at);
 
 	const stringIdRaw = { ...raw, id: '999' };
 	const mappedStringId = adapter.mapTask(stringIdRaw, baseConfig, 'completed');
@@ -93,34 +97,34 @@ test('mapTask: SHOW_ASSIGNEES=false udelader assignedNames-feltet helt', () => {
 });
 
 test('filterAndSortCompleted: filtrerer til i dag ELLER inden for lookback-vinduet, sorterer nyest først, begrænser antal', () => {
-	const raw = mockData.mockCompletedTasksResponse().data;
+	const nowMs = Date.now();
+	const raw = mockData.mockCompletedTasksResponse(nowMs).data;
 	const mapped = raw.map((r) => adapter.mapTask(r, baseConfig, 'completed'));
 
-	// "nu" sat til 2026-07-14 18:00 CEST — WPC-0101 (afsluttet i går 16:10, ~25t50m
-	// siden) er hverken "i dag" eller inden for 24-timers lookback, og skal derfor
+	// WPC-0101 er (i mock-dataene) bevidst afsluttet 30 timer før $nowMs —
+	// hverken "i dag" eller inden for standard-lookback (24t), skal derfor
 	// filtreres væk.
-	const nowMs = Date.parse('2026-07-14T18:00:00+02:00');
 	const result = adapter.filterAndSortCompleted(mapped, baseConfig, nowMs);
 
 	assert.deepEqual(result.map((t) => t.taskNumber), ['WPC-0122', 'WPC-0118']);
 });
 
 test('filterAndSortCompleted: en udvidet lookback-periode kan trække gårsdagens opgave med ind', () => {
-	const raw = mockData.mockCompletedTasksResponse().data;
+	const nowMs = Date.now();
+	const raw = mockData.mockCompletedTasksResponse(nowMs).data;
 	const config = { ...baseConfig, completedLookbackHours: 48 };
 	const mapped = raw.map((r) => adapter.mapTask(r, config, 'completed'));
 
-	const nowMs = Date.parse('2026-07-14T12:00:00+02:00');
 	const result = adapter.filterAndSortCompleted(mapped, config, nowMs);
 
 	assert.ok(result.some((t) => t.taskNumber === 'WPC-0101'));
 });
 
 test('filterAndSortCompleted: respekterer COMPLETED_TASK_LIMIT', () => {
-	const raw = mockData.mockCompletedTasksResponse().data;
+	const nowMs = Date.now();
+	const raw = mockData.mockCompletedTasksResponse(nowMs).data;
 	const config = { ...baseConfig, completedTaskLimit: 1 };
 	const mapped = raw.map((r) => adapter.mapTask(r, config, 'completed'));
-	const nowMs = Date.parse('2026-07-14T12:00:00+02:00');
 
 	const result = adapter.filterAndSortCompleted(mapped, config, nowMs);
 	assert.equal(result.length, 1);
@@ -132,11 +136,12 @@ test('filterAndSortCompleted: tomt input giver tom liste uden fejl', () => {
 });
 
 test('sortInProgress: ældste igangværende opgave først', () => {
-	const raw = mockData.mockInProgressTasksResponse().data;
+	const nowMs = Date.now();
+	const raw = mockData.mockInProgressTasksResponse(nowMs).data;
 	const mapped = raw.map((r) => adapter.mapTask(r, baseConfig, 'in_progress'));
 	const sorted = adapter.sortInProgress(mapped);
 
-	// WPC-0219 startede 10:20, WPC-0231 startede 11:45, WPC-0240 startede 13:05
+	// WPC-0219 startede for 160 min siden, WPC-0231 for 105 min siden, WPC-0240 for 25 min siden.
 	assert.deepEqual(sorted.map((t) => t.taskNumber), ['WPC-0219', 'WPC-0231', 'WPC-0240']);
 });
 
@@ -145,8 +150,8 @@ test('mapShift: kombinerer shift_date + start_time/end_time til korrekt ISO 8601
 	const mapped = adapter.mapShift(raw, baseConfig);
 
 	assert.equal(mapped.title, 'Aftenvagt');
-	assert.equal(mapped.startTime, '2026-07-14T18:00:00+02:00');
-	assert.equal(mapped.endTime, '2026-07-14T22:00:00+02:00');
+	assert.equal(mapped.startTime, time.combineDateTime(raw.shift_date, raw.start_time, baseConfig.timezone));
+	assert.equal(mapped.endTime, time.combineDateTime(raw.shift_date, raw.end_time, baseConfig.timezone));
 	assert.equal(mapped.status, 'open');
 
 	const forbidden = ['description', 'location', 'created_by', 'signup_type', 'arrangement_id', 'user_count'];
@@ -159,11 +164,11 @@ test('mapShift: kombinerer shift_date + start_time/end_time til korrekt ISO 8601
 });
 
 test('mapShift: overnatningsvagt (end_time < start_time) rykker sluttidspunktet til dagen efter', () => {
-	const raw = mockData.mockShiftsResponse().data[2]; // Natvagt: 2026-07-15 22:00–06:00
+	const raw = mockData.mockShiftsResponse().data[2]; // Natvagt: samme shift_date, 22:00–06:00
 	const mapped = adapter.mapShift(raw, baseConfig);
 
-	assert.equal(mapped.startTime, '2026-07-15T22:00:00+02:00');
-	assert.equal(mapped.endTime, '2026-07-16T06:00:00+02:00');
+	assert.equal(mapped.startTime, time.combineDateTime(raw.shift_date, raw.start_time, baseConfig.timezone));
+	assert.equal(mapped.endTime, time.combineDateTime(time.addDays(raw.shift_date, 1), raw.end_time, baseConfig.timezone));
 	assert.ok(Date.parse(mapped.endTime) > Date.parse(mapped.startTime), 'endTime skal ligge efter startTime');
 });
 
@@ -173,15 +178,16 @@ test('mapShift: manglende max_users/location/description fejler ikke', () => {
 });
 
 test('filterAndSortShifts: aktuelle vagter før kommende, afsluttede vagter (endTime i fortiden) filtreres væk', () => {
-	const raw = mockData.mockShiftsResponse().data;
+	const nowMs = Date.now();
+	const raw = mockData.mockShiftsResponse(nowMs).data;
 	const mapped = raw.map((r) => adapter.mapShift(r, baseConfig));
 
-	// "nu" er midt i Aftenvagt (18-22), efter Dagvagt (08-16) og efter den
-	// aflyste Ekstravagt (12-14) — de to sidste skal filtreres væk som fortid.
-	const nowMs = Date.parse('2026-07-14T19:00:00+02:00');
+	// Aftenvagt er i gang lige nu (startede for 1t siden), Dagvagt og Natvagt
+	// ligger begge ude i fremtiden (Dagvagt nærmest) — den aflyste Ekstravagt
+	// er allerede overstået (endte for 8t siden) og skal filtreres væk.
 	const result = adapter.filterAndSortShifts(mapped, nowMs);
 
-	assert.deepEqual(result.map((s) => s.title), ['Aftenvagt', 'Natvagt']);
+	assert.deepEqual(result.map((s) => s.title), ['Aftenvagt', 'Dagvagt', 'Natvagt']);
 });
 
 test('filterAndSortShifts: tomt input giver tom liste', () => {
@@ -341,6 +347,118 @@ test('createAdapter (live, ARRANGEMENT_ID sat): kalder aldrig /arrangements, sen
 		const adapterInstance = adapter.createAdapter(config);
 		await adapterInstance.fetchInProgressTasks();
 		assert.equal(arrangementsCalled, false);
+	} finally {
+		global.fetch = originalFetch;
+	}
+});
+
+// ---- Kommende opgaver (status "planned", tidsvindue) -----------------------
+
+test('mapTask ("planned"): scheduledAt hentes fra appointment_time, med fallback til due_date', () => {
+	const raw = mockData.mockUpcomingTasksResponse().data[0]; // har appointment_time
+	const mapped = adapter.mapTask(raw, baseConfig, 'planned');
+	assert.equal(mapped.status, 'planned');
+	assert.equal(mapped.scheduledAt, raw.appointment_time);
+	assert.equal(Object.prototype.hasOwnProperty.call(mapped, 'startedAt'), false);
+	assert.equal(Object.prototype.hasOwnProperty.call(mapped, 'completedAt'), false);
+
+	const dueDateOnly = mockData.mockUpcomingTasksResponse().data[1]; // kun due_date
+	const mappedDueDate = adapter.mapTask(dueDateOnly, baseConfig, 'planned');
+	assert.equal(mappedDueDate.scheduledAt, dueDateOnly.due_date);
+});
+
+test('mapTask ("planned"): ingen tidspunkt sat giver scheduledAt=null, ikke en fejl', () => {
+	const raw = { id: 1, task_number: 'X-1', title: 'Uden tid', appointment_time: null, due_date: null, assignees: [] };
+	const mapped = adapter.mapTask(raw, baseConfig, 'planned');
+	assert.equal(mapped.scheduledAt, null);
+});
+
+test('filterAndSortUpcoming: kun opgaver inden for (nu, nu+lookahead], nærmeste først, begrænset til UPCOMING_TASK_LIMIT', () => {
+	// mock-dataene bygges relativt til et givet nowMs (se mock-data.js) — brug
+	// samme nowMs til filtreringen, så testen er uafhængig af hvornår den køres.
+	const nowMs = Date.now();
+	const raw = mockData.mockUpcomingTasksResponse(nowMs).data;
+	const mapped = raw.map((r) => adapter.mapTask(r, baseConfig, 'planned'));
+	const config = { ...baseConfig, upcomingLookaheadHours: 24, upcomingTaskLimit: 10 };
+	const result = adapter.filterAndSortUpcoming(mapped, config, nowMs);
+
+	// WPC-0132 ligger 3 dage ude — uden for 24-timers-vinduet, skal filtreres væk.
+	assert.deepEqual(result.map((t) => t.taskNumber), ['WPC-0130', 'WPC-0131']);
+});
+
+test('filterAndSortUpcoming: en opgave med et tidspunkt der allerede er passeret, filtreres væk', () => {
+	const config = { ...baseConfig, upcomingLookaheadHours: 24, upcomingTaskLimit: 10 };
+	const nowMs = Date.parse('2026-07-16T12:00:00+02:00');
+	const tasks = [
+		adapter.mapTask({ id: 1, task_number: 'A', title: 'Fortid', appointment_time: '2026-07-16T10:00:00+02:00', assignees: [] }, config, 'planned'),
+		adapter.mapTask({ id: 2, task_number: 'B', title: 'Fremtid', appointment_time: '2026-07-16T14:00:00+02:00', assignees: [] }, config, 'planned'),
+	];
+	const result = adapter.filterAndSortUpcoming(tasks, config, nowMs);
+	assert.deepEqual(result.map((t) => t.taskNumber), ['B']);
+});
+
+test('filterAndSortUpcoming: respekterer UPCOMING_TASK_LIMIT', () => {
+	const config = { ...baseConfig, upcomingLookaheadHours: 24, upcomingTaskLimit: 1 };
+	const nowMs = Date.parse('2026-07-16T12:00:00+02:00');
+	const tasks = [
+		adapter.mapTask({ id: 1, task_number: 'A', title: 'Først', appointment_time: '2026-07-16T13:00:00+02:00', assignees: [] }, config, 'planned'),
+		adapter.mapTask({ id: 2, task_number: 'B', title: 'Senere', appointment_time: '2026-07-16T15:00:00+02:00', assignees: [] }, config, 'planned'),
+	];
+	const result = adapter.filterAndSortUpcoming(tasks, config, nowMs);
+	assert.deepEqual(result.map((t) => t.taskNumber), ['A']);
+});
+
+test('filterAndSortUpcoming: tomt input giver tom liste', () => {
+	assert.deepEqual(adapter.filterAndSortUpcoming([], baseConfig, Date.now()), []);
+});
+
+// ---- Vagt-deltagernavne (SHOW_SHIFT_NAMES) ---------------------------------
+
+test('mapShift: participantNames udelades helt når SHOW_SHIFT_NAMES ikke er sat', () => {
+	const raw = mockData.mockShiftsResponse().data[0]; // har users[]
+	const mapped = adapter.mapShift(raw, baseConfig); // baseConfig har ikke showShiftNames
+	assert.equal(Object.prototype.hasOwnProperty.call(mapped, 'participantNames'), false);
+});
+
+test('mapShift: SHOW_SHIFT_NAMES=true giver kun fornavne, ikke fulde navne, og springer annullerede deltagere over', () => {
+	const raw = mockData.mockShiftsResponse().data[0]; // Mikkel Rasmussen, Sofie Jensen, + Afmeldt Person (cancelled)
+	const config = { ...baseConfig, showShiftNames: true };
+	const mapped = adapter.mapShift(raw, config);
+	assert.deepEqual(mapped.participantNames.sort(), ['Mikkel', 'Sofie'].sort());
+});
+
+test('extractShiftFirstNames: ingen users[] giver tom liste, ikke en fejl', () => {
+	assert.deepEqual(adapter.extractShiftFirstNames({}), []);
+	assert.deepEqual(adapter.extractShiftFirstNames({ users: null }), []);
+});
+
+test('extractShiftFirstNames: dedup + trimmer whitespace i navnet', () => {
+	const names = adapter.extractShiftFirstNames({
+		users: [
+			{ name: '  Anna Andersen ', status: 'assigned' },
+			{ name: 'Anna Berg', status: 'confirmed' }, // samme fornavn, anden person — skal ikke dubleres væk fejlagtigt kun hvis identisk streng
+		],
+	});
+	assert.deepEqual(names, ['Anna']); // begge er "Anna" som fornavn — dedupliceres bevidst til én visning
+});
+
+test('createAdapter (live): getRawShifts sender include_users=1 når SHOW_SHIFT_NAMES=true, ellers 0', async () => {
+	const originalFetch = global.fetch;
+	const seenIncludeUsers = [];
+
+	global.fetch = async (url) => {
+		seenIncludeUsers.push(url.searchParams.get('include_users'));
+		return { ok: true, status: 200, json: async () => ({ success: true, data: [] }) };
+	};
+
+	try {
+		const configOn = { ...baseConfig, apiMode: 'live', wpBaseUrl: 'https://example.invalid', wpApiNamespace: '/wp-json/wp-community/v1', wpUsername: 'u', wpApplicationPassword: 'p', fetchTimeoutMs: 1000, arrangementId: 3, showShiftNames: true };
+		await adapter.createAdapter(configOn).fetchShifts();
+
+		const configOff = { ...configOn, showShiftNames: false };
+		await adapter.createAdapter(configOff).fetchShifts();
+
+		assert.deepEqual(seenIncludeUsers, ['1', '0']);
 	} finally {
 		global.fetch = originalFetch;
 	}
