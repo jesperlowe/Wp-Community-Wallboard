@@ -274,18 +274,23 @@ sudo raspi-config   # System Options → Boot / Auto Login → Console Autologin
 
 cat >> ~/.bash_profile <<'EOF'
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-  exec cage -X -- /opt/wallboard/deployment/kiosk-autostart.sh
+  exec cage -- /opt/wallboard/deployment/kiosk-autostart.sh
 fi
 EOF
 
 sudo reboot
 ```
 
-`-X` starter en indlejret Xwayland, så Chromium kører i sin almindelige,
-velafprøvede X11-tilstand frem for den mere version-sarte native
-Wayland-vej. Ved at pege cage på `kiosk-autostart.sh` (i stedet for
-Chromium direkte) genbruges hele `/health`-ventelogikken,
-chromium/chromium-browser-detektionen og genstarts-løkken uændret.
+Debians/Raspberry Pi OS' `cage`-pakke er **ikke** bygget med
+Xwayland-understøttelse (der findes intet `-X`-flag — `cage -h` viser kun
+`-d`/`-h`/`-m`/`-s`/`-v`), så Chromium kører nativt på Wayland i stedet.
+`kiosk-autostart.sh` opdager selv, at den kører under cage (via
+`$WAYLAND_DISPLAY`, som cage sætter for sit client-process) og tilføjer
+automatisk `--ozone-platform=wayland` — ingen manuel flag-håndtering
+nødvendig. Ved at pege cage på `kiosk-autostart.sh` (i stedet for Chromium
+direkte) genbruges hele `/health`-ventelogikken,
+chromium/chromium-browser-detektionen og genstarts-løkken uændret, for
+begge kiosk-veje (X11/LXDE og Wayland/cage).
 
 `xset`-kaldene i `kiosk-autostart.sh` er X11-specifikke og fejler stille
 (`|| true`) under Wayland/cage — tilføj i stedet `consoleblank=0` til

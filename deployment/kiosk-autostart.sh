@@ -1,14 +1,27 @@
 #!/usr/bin/env bash
 #
 # Starter Chromium i kiosk-mode mod wallboardet, efter at have ventet på at
-# /health svarer. Tænkt til at blive kaldt fra skrivebordsmiljøets autostart
-# (se README.md, afsnittet "Kiosk mode") — IKKE fra systemd direkte, da den
-# har brug for en kørende X-session (xset).
+# /health svarer. Tænkt til at blive kaldt fra enten skrivebordsmiljøets
+# autostart (X11/LXDE, se README.md's "Kiosk mode") ELLER som cage's
+# APPLICATION-argument (Raspberry Pi OS Lite uden skrivebord, se README.md's
+# "Kiosk mode uden skrivebordsmiljø") — IKKE fra systemd direkte, da begge
+# veje kræver en rigtig display-session (X11 hhv. Wayland).
 #
 # Wallboardet må aldrig afhænge af at Cockpit er åbent — dette script rører
 # udelukkende ved browseren, ikke wallboard-servicen selv (den styres af
 # systemd, se wallboard.service).
 set -euo pipefail
+
+# [2026-07-16] Debians/Raspberry Pi OS' cage-pakke er IKKE bygget med
+# Xwayland-understøttelse (ingen -X-mulighed) — Chromium skal derfor køre
+# nativt på Wayland, når scriptet startes som cage's APPLICATION. cage sætter
+# $WAYLAND_DISPLAY for sit client-process, så det bruges til at skelne fra
+# den almindelige X11/LXDE-vej, hvor disse flag ville forhindre Chromium i at
+# starte overhovedet (ingen Wayland-compositor at forbinde til der).
+CHROMIUM_PLATFORM_FLAGS=()
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+	CHROMIUM_PLATFORM_FLAGS=( --ozone-platform=wayland --enable-features=UseOzonePlatform )
+fi
 
 WALLBOARD_URL="${WALLBOARD_URL:-http://127.0.0.1/}"
 HEALTH_URL="${WALLBOARD_URL%/}/health"
@@ -67,6 +80,7 @@ echo "Starter ${BROWSER_BIN} mod ${WALLBOARD_URL}"
 # med at køre uden manuel indgriben.
 while true; do
 	"${BROWSER_BIN}" \
+		"${CHROMIUM_PLATFORM_FLAGS[@]}" \
 		--kiosk \
 		--incognito \
 		--noerrdialogs \
