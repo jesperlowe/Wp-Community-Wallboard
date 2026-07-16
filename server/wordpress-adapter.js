@@ -237,6 +237,31 @@ function filterAndSortUpcoming(mappedTasks, config, nowMs = Date.now()) {
 
 // ---- Mapping: vagter ------------------------------------------------------
 
+/**
+ * [2026-07-16, bugfix] start_time/end_time viste sig — bekræftet ved at
+ * hente et rå vagt-svar direkte fra WordPress — at være FULDE
+ * "YYYY-MM-DD HH:MM:SS"-strenge, ikke et bart klokkeslæt som oprindeligt
+ * antaget (DB-kolonnen er DATETIME, ikke TIME, på trods af feltnavnet). Den
+ * gamle kode splittede en sådan streng på ':' og fik et ugyldigt
+ * "shift_dateT2026-07-16 14:00:00Z"-resultat, som strtotime/Date.parse
+ * afviste — startTime/endTime blev derfor stille null for enhver rigtig
+ * vagt. Denne funktion håndterer begge former: en fuld dato+tid-streng
+ * bruges direkte (ignorerer shift_date); et bart klokkeslæt (defensivt, i
+ * tilfælde af en ældre/anden WP-version) kombineres i stedet med shift_date
+ * som hidtil.
+ */
+function parseShiftDateTime(value, fallbackDateStr, timeZone) {
+	const str = toStr(value);
+	if (!str) return null;
+
+	const withDate = str.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/);
+	if (withDate) {
+		return time.combineDateTime(withDate[1], withDate[2], timeZone);
+	}
+
+	return time.combineDateTime(toStr(fallbackDateStr), str, timeZone);
+}
+
 function mapShift(raw, config) {
 	if (!raw || typeof raw !== 'object') return null;
 
@@ -244,17 +269,18 @@ function mapShift(raw, config) {
 	if (id === null) return null;
 
 	const shiftDate = toStr(raw.shift_date);
-	const startTime = time.combineDateTime(shiftDate, toStr(raw.start_time, '00:00:00'), config.timezone);
+	const startTime = parseShiftDateTime(raw.start_time, shiftDate, config.timezone);
+	let endTime = parseShiftDateTime(raw.end_time, shiftDate, config.timezone);
 
-	// Overnatningsvagter (fx 22:00–06:00) deler ét shift_date i WP — end_time
-	// hører derfor reelt til DAGEN EFTER, når klokkeslættet er tidligere end
-	// start_time. Uden dette ruller vi datoen frem, ville sådan en vagts
-	// beregnede sluttidspunkt ligge FØR starttidspunktet, og den ville
-	// fejlagtigt blive filtreret væk som "allerede overstået" kort efter den
-	// startede (se filterAndSortShifts()).
-	let endTime = time.combineDateTime(shiftDate, toStr(raw.end_time, '00:00:00'), config.timezone);
+	// Overnatningsvagter (fx 22:00–06:00): hvis det beregnede sluttidspunkt
+	// stadig lander før eller på starttidspunktet, lægges der simpelthen et
+	// døgn til selve instansen — format-uafhængigt, virker uanset om
+	// tidspunkterne kom fra en fuld dato+tid-streng eller shift_date-fallbacket.
+	// Uden dette ville en sådan vagts sluttidspunkt ligge FØR starttidspunktet,
+	// og den ville fejlagtigt blive filtreret væk som "allerede overstået" kort
+	// efter den startede (se filterAndSortShifts()).
 	if (startTime && endTime && Date.parse(endTime) <= Date.parse(startTime)) {
-		endTime = time.combineDateTime(time.addDays(shiftDate, 1), toStr(raw.end_time, '00:00:00'), config.timezone);
+		endTime = time.formatInstantIso(Date.parse(endTime) + 24 * 60 * 60 * 1000, config.timezone);
 	}
 
 	const shift = {
@@ -404,6 +430,7 @@ module.exports = {
 	// Eksporteret for tests — ren mapping-/filtreringslogik uden netværk.
 	mapTask,
 	mapShift,
+	parseShiftDateTime,
 	filterAndSortCompleted,
 	filterAndSortShifts,
 	filterAndSortUpcoming,

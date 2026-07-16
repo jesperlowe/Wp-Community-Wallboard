@@ -5,7 +5,6 @@ const assert = require('node:assert/strict');
 
 const adapter = require('../server/wordpress-adapter');
 const mockData = require('../server/mock-data');
-const time = require('../server/time');
 
 const baseConfig = {
 	timezone: 'Europe/Copenhagen',
@@ -150,8 +149,8 @@ test('mapShift: kombinerer shift_date + start_time/end_time til korrekt ISO 8601
 	const mapped = adapter.mapShift(raw, baseConfig);
 
 	assert.equal(mapped.title, 'Aftenvagt');
-	assert.equal(mapped.startTime, time.combineDateTime(raw.shift_date, raw.start_time, baseConfig.timezone));
-	assert.equal(mapped.endTime, time.combineDateTime(raw.shift_date, raw.end_time, baseConfig.timezone));
+	assert.equal(mapped.startTime, adapter.parseShiftDateTime(raw.start_time, raw.shift_date, baseConfig.timezone));
+	assert.equal(mapped.endTime, adapter.parseShiftDateTime(raw.end_time, raw.shift_date, baseConfig.timezone));
 	assert.equal(mapped.status, 'open');
 
 	const forbidden = ['description', 'location', 'created_by', 'signup_type', 'arrangement_id', 'user_count'];
@@ -163,12 +162,47 @@ test('mapShift: kombinerer shift_date + start_time/end_time til korrekt ISO 8601
 	assert.equal(weird.status, 'noget_helt_nyt');
 });
 
-test('mapShift: overnatningsvagt (end_time < start_time) rykker sluttidspunktet til dagen efter', () => {
-	const raw = mockData.mockShiftsResponse().data[2]; // Natvagt: samme shift_date, 22:00–06:00
+test('parseShiftDateTime: håndterer fulde "YYYY-MM-DD HH:MM:SS"-strenge fra WordPress (regressionstest — fundet live)', () => {
+	// [2026-07-16] Rå API-svar fra en rigtig installation viste at
+	// start_time/end_time er fulde DATETIME-strenge (DB-kolonnen er DATETIME,
+	// ikke TIME), ikke et bart klokkeslæt som oprindeligt antaget — den gamle
+	// kode splittede sådan en streng blindt på ':' og fik et ugyldigt
+	// resultat, som gav startTime/endTime = null for enhver rigtig vagt.
+	const iso = adapter.parseShiftDateTime('2026-07-16 08:00:00', '2026-01-01', 'Europe/Copenhagen');
+	assert.equal(iso, '2026-07-16T08:00:00+02:00');
+	assert.notEqual(iso, null);
+});
+
+test('parseShiftDateTime: bart klokkeslæt (uden dato) falder tilbage til shift_date, som hidtil', () => {
+	const iso = adapter.parseShiftDateTime('08:00:00', '2026-07-16', 'Europe/Copenhagen');
+	assert.equal(iso, '2026-07-16T08:00:00+02:00');
+});
+
+test('parseShiftDateTime: tomt/manglende værdi giver null, ikke en fejl', () => {
+	assert.equal(adapter.parseShiftDateTime('', '2026-07-16', 'Europe/Copenhagen'), null);
+	assert.equal(adapter.parseShiftDateTime(null, '2026-07-16', 'Europe/Copenhagen'), null);
+});
+
+test('mapShift: overnatningsvagt fra mock-dataene (Natvagt) parses korrekt, endTime efter startTime', () => {
+	const raw = mockData.mockShiftsResponse().data[2]; // Natvagt: 22:00 → næste dags 06:00
 	const mapped = adapter.mapShift(raw, baseConfig);
 
-	assert.equal(mapped.startTime, time.combineDateTime(raw.shift_date, raw.start_time, baseConfig.timezone));
-	assert.equal(mapped.endTime, time.combineDateTime(time.addDays(raw.shift_date, 1), raw.end_time, baseConfig.timezone));
+	assert.ok(mapped.startTime && mapped.endTime, 'begge tidspunkter skal kunne parses');
+	assert.ok(Date.parse(mapped.endTime) > Date.parse(mapped.startTime), 'endTime skal ligge efter startTime');
+});
+
+test('mapShift: overnatningsvagt hvor end_time IKKE selv har en fremrykket dato, rykkes sluttidspunktet alligevel til dagen efter', () => {
+	// Modsat den øvrige mock-data (hvor klienten allerede har fremrykket
+	// end_times dato) — dækker en ældre/anden klient der nøjes med at sende
+	// samme dato for begge, kun klokkeslættet forskelligt.
+	const raw = {
+		id: 99, title: 'Vagt uden fremrykket slutdato', status: 'open',
+		shift_date: '2026-07-16', start_time: '2026-07-16 22:00:00', end_time: '2026-07-16 06:00:00',
+	};
+	const mapped = adapter.mapShift(raw, baseConfig);
+
+	assert.equal(mapped.startTime, '2026-07-16T22:00:00+02:00');
+	assert.equal(mapped.endTime, '2026-07-17T06:00:00+02:00');
 	assert.ok(Date.parse(mapped.endTime) > Date.parse(mapped.startTime), 'endTime skal ligge efter startTime');
 });
 

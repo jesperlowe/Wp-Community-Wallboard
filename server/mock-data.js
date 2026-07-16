@@ -36,10 +36,6 @@ function relativeDateAndTime(nowMs, hoursFromNow) {
 	return { date: iso.slice(0, 10), time: iso.slice(11, 19) };
 }
 
-function relativeDateOnly(nowMs, daysFromNow) {
-	return time.addDays(time.dateKeyInTimezone(nowMs, TZ), daysFromNow);
-}
-
 function mockInProgressTasksResponse(nowMs = Date.now()) {
 	return envelope([
 		{
@@ -239,12 +235,24 @@ function mockUpcomingTasksResponse(nowMs = Date.now()) {
 	]);
 }
 
+/**
+ * [2026-07-16] start_time/end_time er reelt fulde "YYYY-MM-DD HH:MM:SS"
+ * DATETIME-strenge fra WordPress, ikke et bart klokkeslæt — se
+ * parseShiftDateTime() i wordpress-adapter.js for baggrunden (bekræftet ved
+ * et rå API-kald mod en rigtig installation). Mock-dataene skal efterligne
+ * dette format, ellers ville de ikke fange denne fejlklasse.
+ */
+function shiftDateTime({ date, time: t }) {
+	return `${date} ${t}`;
+}
+
 function mockShiftsResponse(nowMs = Date.now()) {
 	const evening = relativeDateAndTime(nowMs, -1); // startede for 1 time siden
 	const eveningEnd = relativeDateAndTime(nowMs, 2); // slutter om 2 timer — "aktuel" lige nu
 	const day = relativeDateAndTime(nowMs, 4); // starter om 4 timer
 	const dayEnd = relativeDateAndTime(nowMs, 10); // — "kommende"
-	const nightDate = relativeDateOnly(nowMs, 1); // i morgen
+	const nightStart = relativeDateAndTime(nowMs, 24 + 22); // i morgen kl. 22
+	const nightEnd = relativeDateAndTime(nowMs, 24 + 30); // i overmorgen kl. 06 — dato allerede korrekt fremrykket, som Flutter-appens shift_form_screen.dart gør ved oprettelse
 	const cancelledStart = relativeDateAndTime(nowMs, -10);
 	const cancelledEnd = relativeDateAndTime(nowMs, -8); // allerede overstået
 
@@ -253,8 +261,8 @@ function mockShiftsResponse(nowMs = Date.now()) {
 			id: 45,
 			title: 'Aftenvagt',
 			shift_date: evening.date,
-			start_time: evening.time,
-			end_time: eveningEnd.time,
+			start_time: shiftDateTime(evening),
+			end_time: shiftDateTime(eveningEnd),
 			location: 'Hovedindgang',
 			description: 'Skal ikke vises på wallboardet.',
 			arrangement_id: 3,
@@ -274,8 +282,8 @@ function mockShiftsResponse(nowMs = Date.now()) {
 			id: 44,
 			title: 'Dagvagt',
 			shift_date: day.date,
-			start_time: day.time,
-			end_time: dayEnd.time,
+			start_time: shiftDateTime(day),
+			end_time: shiftDateTime(dayEnd),
 			location: 'Hovedindgang',
 			description: '',
 			arrangement_id: 3,
@@ -292,13 +300,14 @@ function mockShiftsResponse(nowMs = Date.now()) {
 		},
 		{
 			// max_users mangler (null) — "ubegrænset" plads, skal ikke fejle.
-			// Overnatningsvagt (22:00–06:00, samme shift_date for begge i WP) —
-			// tester dags-rul-logikken i mapShift().
+			// Overnatningsvagt (22:00–06:00) — end_time har allerede den
+			// fremrykkede dato, som virkelige klienter sender (se kommentar
+			// ved nightEnd ovenfor).
 			id: 47,
 			title: 'Natvagt',
-			shift_date: nightDate,
-			start_time: '22:00:00',
-			end_time: '06:00:00',
+			shift_date: nightStart.date,
+			start_time: shiftDateTime(nightStart),
+			end_time: shiftDateTime(nightEnd),
 			location: '',
 			description: '',
 			arrangement_id: 3,
@@ -315,8 +324,8 @@ function mockShiftsResponse(nowMs = Date.now()) {
 			id: 40,
 			title: 'Ekstravagt, aflyst',
 			shift_date: cancelledStart.date,
-			start_time: cancelledStart.time,
-			end_time: cancelledEnd.time,
+			start_time: shiftDateTime(cancelledStart),
+			end_time: shiftDateTime(cancelledEnd),
 			location: '',
 			description: '',
 			arrangement_id: 3,
