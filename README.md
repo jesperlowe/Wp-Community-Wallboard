@@ -57,7 +57,7 @@ Kopiér `.env.example` til `.env` og udfyld:
 | `WP_USERNAME` / `WP_APPLICATION_PASSWORD` | En dedikeret WordPress-bruger (fx `wallboard`) med et Application Password og **kun** `wpc_access_app`-rettigheden — brug pluginets egen side "WP Community → Brugere & Roller", ikke en `wpc_leader`/`wpc_admin`-rolle (unødvendigt bredt for en kiosk-konto). Et Application Password kan enten oprettes under brugerens profil i wp-admin, eller hentes programmatisk (samme vej som selve appen bruger): `POST /wp-json/wp-community/v1/login` med `{"username":"...","password":"..."}` returnerer et `app_password` i svaret. **Vigtigt**: uanset hvilke `wpc_*`-rettigheder kontoen har, kan den (medmindre den er en ægte WP-administrator) kun se opgaver/vagter for arrangementer den selv er **deltager** i — se `ARRANGEMENT_ID` nedenfor. |
 | `TIMEZONE` | IANA-tidszone, bruges til at kombinere vagters dato+klokkeslæt til korrekt ISO 8601 og til "afsluttet i dag"-filtrering. |
 | `REFRESH_SECONDS` | Hvor ofte serveren henter nye data fra WordPress, og hvor ofte frontenden poller `/api/wallboard`. |
-| `COMPLETED_TASK_LIMIT` | Maks. antal opgaver i "Afsluttet i dag". |
+| `COMPLETED_TASK_LIMIT` | Maks. antal opgaver i "Afsluttet seneste N timer"-panelet. |
 | `COMPLETED_LOOKBACK_HOURS` | En afsluttet opgave vises hvis den er afsluttet i dag ELLER inden for dette antal timer. |
 | `SHIFT_LOOKAHEAD_HOURS` | Hvor langt frem i tiden der hentes vagter. |
 | `SHOW_ASSIGNEES` | `false` udelader `assignedNames` fra opgaver helt (ikke bare en tom liste). |

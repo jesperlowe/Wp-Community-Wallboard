@@ -4,6 +4,7 @@
 	var CONFIG = window.WALLBOARD_CONFIG || {
 		refreshSeconds: 30,
 		completedTaskLimit: 10,
+		completedLookbackHours: 24,
 		pageIntervalSeconds: 10,
 	};
 
@@ -351,9 +352,21 @@
 
 	// ---- Init ---------------------------------------------------------------
 
+	// [2026-07-16] Panelet viser "i dag ELLER inden for COMPLETED_LOOKBACK_HOURS"
+	// (se server/wordpress-adapter.js' filterAndSortCompleted) — en statisk
+	// "Afsluttet i dag"-overskrift er derfor misvisende når vinduet reelt er
+	// bredere (fx en opgave afsluttet sent aftenen før). Overskriften afspejler
+	// nu det faktisk konfigurerede vindue, så den aldrig lover mere end den holder.
+	function setCompletedHeading() {
+		var heading = document.getElementById('completed-heading');
+		var hours = CONFIG.completedLookbackHours || 24;
+		heading.textContent = 'Afsluttet seneste ' + hours + ' timer';
+	}
+
 	function init() {
 		tickClock();
 		setInterval(tickClock, 1000);
+		setCompletedHeading();
 
 		var pageIntervalMs = (CONFIG.pageIntervalSeconds || 10) * 1000;
 		inProgressPaginator.start(pageIntervalMs);

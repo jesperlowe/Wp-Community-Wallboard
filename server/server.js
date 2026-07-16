@@ -125,6 +125,7 @@ function createServer(config) {
 		const publicConfig = {
 			refreshSeconds: config.refreshSeconds,
 			completedTaskLimit: config.completedTaskLimit,
+			completedLookbackHours: config.completedLookbackHours,
 			pageIntervalSeconds: PAGE_INTERVAL_SECONDS,
 		};
 		const script = `<script>window.WALLBOARD_CONFIG = ${JSON.stringify(publicConfig)};</script>`;
