@@ -193,6 +193,49 @@ test('Ved fejl på allerførste hentning (ingen disk-cache endnu) er generatedAt
 	}
 });
 
+test('POST /api/kiosk/exit-request + GET /api/kiosk/exit-status: signalet er læses-og-ryddes (ét forbrug pr. tryk)', async () => {
+	const config = baseTestConfig();
+	const instance = createServer(config);
+
+	try {
+		await instance.start();
+		const port = instance.httpServer.address().port;
+		const base = `http://127.0.0.1:${port}`;
+
+		// Før noget tryk: intet signal.
+		assert.deepEqual((await getJson(`${base}/api/kiosk/exit-status`)).body, { requested: false });
+
+		const postRes = await fetch(`${base}/api/kiosk/exit-request`, { method: 'POST' });
+		assert.equal(postRes.status, 204);
+
+		// Første poll efter trykket ser signalet ...
+		assert.deepEqual((await getJson(`${base}/api/kiosk/exit-status`)).body, { requested: true });
+		// ... men det er forbrugt nu, så et efterfølgende poll ser det ikke igen.
+		assert.deepEqual((await getJson(`${base}/api/kiosk/exit-status`)).body, { requested: false });
+	} finally {
+		await instance.stop();
+		fs.rmSync(path.dirname(config.cachePath), { recursive: true, force: true });
+	}
+});
+
+test('GET /api/kiosk/exit-request sætter ikke signalet (kun POST-stien er genkendt, GET falder til 404 som ethvert andet ukendt sti)', async () => {
+	const config = baseTestConfig();
+	const instance = createServer(config);
+
+	try {
+		await instance.start();
+		const port = instance.httpServer.address().port;
+		const base = `http://127.0.0.1:${port}`;
+
+		const res = await fetch(`${base}/api/kiosk/exit-request`);
+		assert.equal(res.status, 404);
+		assert.deepEqual((await getJson(`${base}/api/kiosk/exit-status`)).body, { requested: false });
+	} finally {
+		await instance.stop();
+		fs.rmSync(path.dirname(config.cachePath), { recursive: true, force: true });
+	}
+});
+
 // ---- config.js: HTTPS-håndhævelse (rent funktionstjek, ingen server nødvendig) ----
 
 test('validateWpBaseUrl: afviser usikret ekstern URL, accepterer HTTPS og lokale hosts', () => {

@@ -283,6 +283,22 @@ Wallboardet er **ikke** afhængigt af at Cockpit er åbent — kiosk-scriptet
 rører kun ved browseren, ikke wallboard-servicen (den styres af systemd
 uafhængigt af enhver desktop-session).
 
+### Forlad kiosk-tilstand (tredobbelt-tryk på logoet)
+
+Tryk tre gange på logoet i toppen af skærmen inden for ét sekund for at lukke
+Chromium ned uden tastatur/mus. Frontenden (`frontend/app.js`) sender et
+signal til wallboard-servicen (`POST /api/kiosk/exit-request`), som
+`kiosk-autostart.sh` poller for (`GET /api/kiosk/exit-status`) og reagerer på
+ved at dræbe Chromium og afslutte sig selv i stedet for at genstarte den.
+
+- **Under LXDE (skrivebordsmiljø)**: du lander på det bare skrivebord, og
+  scriptet forsøger automatisk at åbne en terminal (`lxterminal`/`xterm`).
+- **Under cage/Wayland (headless, se nedenfor)**: der er intet
+  skrivebordslag tilbage at vise en terminal i — tty1's konsol-autologin
+  genstarter typisk kiosken igen næsten med det samme. SSH + `pkill cage`
+  (se afsnittet "Kiosk mode uden skrivebordsmiljø") er stadig den
+  pålidelige vej til en terminal på et headless-setup.
+
 ### Kiosk mode uden skrivebordsmiljø (Raspberry Pi OS Lite)
 
 Kører Pi'en headless (`Raspberry Pi OS Lite`, `systemctl get-default` viser

@@ -40,6 +40,11 @@ function createServer(config) {
 		lastFetchOk: false,
 		consecutiveFailures: 0,
 		branding: { logoUrl: null },
+		// Sat af tredobbelt-tryk på logoet i frontend, læst-og-ryddet af
+		// kiosk-autostart.sh's polling (se dens exit-status-kald) — kun i
+		// hukommelsen, med vilje: et servicerestart skal ikke efterlade et
+		// hængende "afslut kiosk"-signal fra en tidligere session.
+		kioskExitRequested: false,
 	};
 
 	let refreshTimer = null;
@@ -183,13 +188,33 @@ function createServer(config) {
 	const httpServer = http.createServer((req, res) => {
 		Promise.resolve()
 			.then(async () => {
+				const url = new URL(req.url, 'http://localhost');
+
+				// Kiosk-exit-gestus (tredobbelt-tryk på logoet, se frontend/app.js):
+				// den eneste mutation servicen tilbyder, og med vilje kun et
+				// in-memory flag — se kioskExitRequested-kommentaren ovenfor.
+				if (req.method === 'POST' && url.pathname === '/api/kiosk/exit-request') {
+					state.kioskExitRequested = true;
+					res.writeHead(204);
+					res.end();
+					return;
+				}
+
 				if (req.method !== 'GET' && req.method !== 'HEAD') {
 					res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' });
 					res.end(JSON.stringify({ error: 'method_not_allowed' }));
 					return;
 				}
 
-				const url = new URL(req.url, 'http://localhost');
+				if (url.pathname === '/api/kiosk/exit-status') {
+					// Læses-og-ryddes: kiosk-autostart.sh poller denne, og hvert
+					// signal skal kun udløse ét afslut-forsøg.
+					const requested = state.kioskExitRequested;
+					state.kioskExitRequested = false;
+					res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+					res.end(JSON.stringify({ requested }));
+					return;
+				}
 
 				if (url.pathname === '/api/wallboard') {
 					const body = JSON.stringify(buildWallboardResponse());

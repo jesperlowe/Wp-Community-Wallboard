@@ -16,10 +16,11 @@
 	// [2026-07-16] Reduceret i takt med at layoutet gik fra "ét fuldt panel +
 	// to halve" til fire lige store paneler i et 2×2-gitter — hvert panel har
 	// nu ca. et kvart skærmbillede i stedet for op til et halvt.
+	// [2026-07-17] Kun completed/shifts bruger stadig et fast antal pr. side
+	// (createPaginator) — inProgress/upcoming autoscroller i stedet
+	// (createAutoScroller) og har derfor ikke brug for en sidestørrelse.
 	var PAGE_SIZE = {
-		inProgress: 4,
 		completed: 4,
-		upcoming: 4,
 		shifts: 3,
 	};
 
@@ -182,6 +183,94 @@
 		return { setItems: setItems, start: start, stop: stop };
 	}
 
+	/**
+	 * [2026-07-17] Alternativ til createPaginator() til paneler hvor et hårdt
+	 * side-skift (fade til en helt ny, fast-talt rækkeblok) føles for
+	 * hakkende — her glider listen i stedet roligt én skærmhøjde ned ad
+	 * gangen (native scrollTo med behavior:'smooth'), og springer blødt
+	 * tilbage til toppen når bunden er nået. Alle rækker renderes samlet
+	 * (ingen fast antal-pr-side-antagelse), hvilket også er mere robust nu
+	 * hvor rækkehøjden varierer med antal tildelte navne (se buildTaskRow).
+	 */
+	function createAutoScroller(listEl, emptyEl, indicatorEl, renderRow) {
+		var items = [];
+		var timer = null;
+
+		function totalPages() {
+			var viewHeight = listEl.clientHeight;
+			if (viewHeight <= 0) return 1;
+			// Samme 4px-tolerance som tick()'s maxScroll-tjek, ellers kan en
+			// scrollHeight der ligger få pixels over et helt antal skærmhøjder
+			// (afrunding/kantlinjer) give en ekstra, reelt ikke-eksisterende side.
+			return Math.max(1, Math.ceil((listEl.scrollHeight - 4) / viewHeight));
+		}
+
+		function updateIndicator() {
+			var pages = totalPages();
+			if (pages > 1) {
+				var viewHeight = listEl.clientHeight;
+				var current = viewHeight > 0 ? Math.round(listEl.scrollTop / viewHeight) : 0;
+				indicatorEl.hidden = false;
+				indicatorEl.textContent = current + 1 + ' / ' + pages;
+			} else {
+				indicatorEl.hidden = true;
+			}
+		}
+
+		function renderAll() {
+			listEl.innerHTML = '';
+			listEl.scrollTop = 0;
+
+			if (items.length === 0) {
+				listEl.hidden = true;
+				emptyEl.hidden = false;
+				indicatorEl.hidden = true;
+				return;
+			}
+
+			listEl.hidden = false;
+			emptyEl.hidden = true;
+
+			items.forEach(function (item) {
+				listEl.appendChild(renderRow(item));
+			});
+
+			updateIndicator();
+		}
+
+		function setItems(newItems) {
+			items = newItems || [];
+			fadeSwap(listEl, renderAll);
+		}
+
+		function tick() {
+			if (items.length === 0) return;
+
+			var viewHeight = listEl.clientHeight;
+			var maxScroll = listEl.scrollHeight - viewHeight;
+			if (maxScroll <= 4) return; // alt indhold er allerede synligt — intet at scrolle til
+
+			var next = listEl.scrollTop + viewHeight;
+			listEl.scrollTo({ top: next >= maxScroll - 4 ? 0 : next, behavior: 'smooth' });
+
+			// Indikatoren opdateres lidt forsinket, så den matcher den nye
+			// scroll-position (scrollTo animerer asynkront).
+			setTimeout(updateIndicator, 400);
+		}
+
+		function start(intervalMs) {
+			stop();
+			timer = setInterval(tick, intervalMs);
+		}
+
+		function stop() {
+			if (timer) clearInterval(timer);
+			timer = null;
+		}
+
+		return { setItems: setItems, start: start, stop: stop };
+	}
+
 	// ---- Rækkebygning ---------------------------------------------------------
 
 	function buildTaskRow(task, timeLabel, timeValueIso) {
@@ -190,12 +279,16 @@
 		var main = el('div', 'row-main');
 		main.appendChild(el('span', 'row-number', task.taskNumber || ''));
 		main.appendChild(el('span', 'row-title', task.title || 'Uden titel'));
+		// [2026-07-17, bugfix] Navne bor i row-main (ikke row-meta) og ombrydes,
+		// så mange tildelte personer ikke presser opgavetitlen sammen — row-meta
+		// har flex-shrink:0 og ville ellers tvinge titlen til at forsvinde bag
+		// ellipsis ved 3+ navne.
+		if (Array.isArray(task.assignedNames) && task.assignedNames.length > 0) {
+			main.appendChild(el('span', 'row-assignee', task.assignedNames.join(', ')));
+		}
 		row.appendChild(main);
 
 		var meta = el('div', 'row-meta');
-		if (Array.isArray(task.assignedNames) && task.assignedNames.length > 0) {
-			meta.appendChild(el('span', 'row-assignee', task.assignedNames.join(', ')));
-		}
 		var timeDate = timeValueIso ? new Date(timeValueIso) : null;
 		var timeText = timeDate
 			? timeLabel + ' ' + relativeDayPrefix(timeDate) + formatClock(timeDate)
@@ -248,7 +341,7 @@
 
 	// ---- Opsætning af de fire paneler ---------------------------------------
 
-	var inProgressPaginator = createPaginator(
+	var inProgressPaginator = createAutoScroller(
 		document.getElementById('inprogress-list'),
 		document.getElementById('inprogress-empty'),
 		document.getElementById('inprogress-page-indicator'),
@@ -262,7 +355,7 @@
 		renderCompletedRow
 	);
 
-	var upcomingPaginator = createPaginator(
+	var upcomingPaginator = createAutoScroller(
 		document.getElementById('upcoming-list'),
 		document.getElementById('upcoming-empty'),
 		document.getElementById('upcoming-page-indicator'),
@@ -340,6 +433,40 @@
 		}
 	}
 
+	// ---- Kiosk-exit-gestus (tredobbelt-tryk på logoet) -------------------
+	// Ingen tastatur/mus på et kiosk-skærmbillede — tre tryk inden for ét
+	// sekund er en gestus der aldrig sker ved uheld, men som personalet kan
+	// huske. Selve afslutningen (Chromium lukkes, vender tilbage til en
+	// terminal) sker i deployment/kiosk-autostart.sh, som poller
+	// /api/kiosk/exit-status — denne handler sætter blot signalet.
+	(function setupKioskExitGesture() {
+		var TAP_WINDOW_MS = 1000;
+		var TAPS_REQUIRED = 3;
+		var tapTimestamps = [];
+		var requestInFlight = false;
+
+		topbarLogo.addEventListener('click', function () {
+			var now = Date.now();
+			tapTimestamps = tapTimestamps.filter(function (t) {
+				return now - t < TAP_WINDOW_MS;
+			});
+			tapTimestamps.push(now);
+			if (tapTimestamps.length < TAPS_REQUIRED) return;
+
+			tapTimestamps = [];
+			if (requestInFlight) return;
+			requestInFlight = true;
+
+			fetch('/api/kiosk/exit-request', { method: 'POST' })
+				.catch(function () {
+					// Ingen retry — personalet kan blot trykke tre gange igen.
+				})
+				.finally(function () {
+					requestInFlight = false;
+				});
+		});
+	})();
+
 	// ---- Data-polling med eksponentiel backoff ved fejl -----------------------
 
 	var lastRenderedJson = { inProgress: null, completed: null, upcoming: null, shifts: null };
@@ -360,7 +487,7 @@
 		var ipKey = JSON.stringify(inProgress);
 		if (ipKey !== lastRenderedJson.inProgress) {
 			lastRenderedJson.inProgress = ipKey;
-			inProgressPaginator.setItems(inProgress, PAGE_SIZE.inProgress);
+			inProgressPaginator.setItems(inProgress);
 		}
 
 		var cpKey = JSON.stringify(completed);
@@ -372,7 +499,7 @@
 		var upKey = JSON.stringify(upcoming);
 		if (upKey !== lastRenderedJson.upcoming) {
 			lastRenderedJson.upcoming = upKey;
-			upcomingPaginator.setItems(upcoming, PAGE_SIZE.upcoming);
+			upcomingPaginator.setItems(upcoming);
 		}
 
 		var shKey = JSON.stringify(shifts);
