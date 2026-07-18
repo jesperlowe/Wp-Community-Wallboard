@@ -318,6 +318,11 @@ function mapShift(raw, config) {
 		startTime,
 		endTime,
 		status: toStr(raw.status, 'unknown'),
+		// [2026-07-19] Bruges af "Vagtdækning"-panelet i ops-layoutet til en
+		// X/Y-dækningsbjælke — maxUsers er null for en ubegrænset vagt
+		// (matcher WPC_Shifts::format_shift()'s samme null-for-ubegrænset).
+		userCount: toIntOrNull(raw.user_count) ?? 0,
+		maxUsers: toIntOrNull(raw.max_users),
 	};
 
 	if (config.showShiftNames) {

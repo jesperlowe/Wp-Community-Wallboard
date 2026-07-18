@@ -19,6 +19,16 @@
 	--status-default: #3a3f47;
 
 	--offline: #b45309;
+
+	/* [2026-07-19] Ops-layoutets palette — samme mørke grundtone som resten
+	   (--bg/--panel-bg/--panel-border genbruges), men et par mere mættede
+	   accentfarver til stat-dots/pills, matcher forlægget for det nye layout. */
+	--ops-blue: #38bdf8;
+	--ops-green: #22c55e;
+	--ops-amber: #f59e0b;
+	--ops-red: #fb7185;
+	--ops-purple: #8b5cf6;
+	--ops-panel-bg: #131a26;
 }
 
 * {
@@ -48,9 +58,33 @@ body {
 	font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-body {
+/* [2026-07-19] body er ikke længere selv flex-containeren — .layout er det
+   nu, så to layouts (klassisk/ops) kan ligge side om side i DOM'en, med kun
+   det aktive synligt via [hidden]. */
+.layout {
+	height: 100%;
 	display: flex;
 	flex-direction: column;
+}
+
+.layout-switch {
+	appearance: none;
+	border: 1px solid var(--panel-border);
+	background: transparent;
+	color: var(--text-muted);
+	font-family: inherit;
+	font-size: 1rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	padding: 0.45rem 0.9rem;
+	border-radius: 0.4rem;
+	cursor: pointer;
+}
+
+.layout-switch:hover,
+.layout-switch:focus-visible {
+	color: var(--text);
+	border-color: var(--accent);
 }
 
 /* ---- Topbjælke ------------------------------------------------------- */
@@ -289,4 +323,496 @@ body {
 	font-size: 1rem;
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   OPS-LAYOUT — se index.html's kommentar for hvilke sektioner der er reelle
+   data (vagtdækning, opgavekø) vs. bevidst [hidden] indtil en datakilde
+   findes (stat-kort, teamstatus, advarsler, dækningstendens).
+   ========================================================================== */
+
+.ops-topbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1.5rem;
+	padding: 1rem 2rem;
+	background: var(--panel-bg);
+	border-bottom: 2px solid var(--ops-blue);
+	flex-shrink: 0;
+}
+
+.ops-topbar-brand {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.ops-topbar-logo-badge {
+	width: 2.6rem;
+	height: 2.6rem;
+	border-radius: 0.5rem;
+	background: var(--ops-blue);
+	color: #06202e;
+	font-weight: 800;
+	font-size: 1.3rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.ops-topbar-logo-img {
+	height: 2.6rem;
+	width: auto;
+	max-width: 8rem;
+	object-fit: contain;
+}
+
+.ops-topbar-title {
+	font-size: 1.5rem;
+	font-weight: 800;
+	letter-spacing: 0.02em;
+}
+
+.ops-topbar-subtitle {
+	font-size: 0.95rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	color: var(--text-muted);
+}
+
+.ops-topbar-right {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.ops-pill {
+	padding: 0.35rem 0.9rem;
+	border-radius: 999px;
+	font-size: 0.95rem;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+}
+
+.ops-pill--live {
+	background: rgba(34, 197, 94, 0.15);
+	color: var(--ops-green);
+	border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.ops-pill--offline {
+	background: rgba(180, 83, 9, 0.18);
+	color: #fbbf24;
+	border: 1px solid rgba(180, 83, 9, 0.45);
+}
+
+.ops-pill--demo {
+	background: rgba(139, 92, 246, 0.15);
+	color: var(--ops-purple);
+	border: 1px solid rgba(139, 92, 246, 0.4);
+}
+
+.ops-topbar-datetime {
+	text-align: right;
+}
+
+.ops-topbar-date {
+	font-size: 0.95rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: var(--text-muted);
+}
+
+.ops-topbar-clock {
+	font-size: 1.6rem;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- Stat-kort (klar, men skjult indtil vi har rigtige tal) ------------- */
+
+.ops-stats {
+	flex-shrink: 0;
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: 0.75rem;
+	padding: 0.85rem 1.25rem 0;
+}
+
+.ops-stat-card {
+	background: var(--ops-panel-bg);
+	border: 1px solid var(--panel-border);
+	border-radius: 0.5rem;
+	padding: 0.9rem 1.1rem;
+}
+
+.ops-stat-card__top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.ops-stat-label {
+	font-size: 0.85rem;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+}
+
+.ops-stat-dot {
+	width: 0.6rem;
+	height: 0.6rem;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.ops-stat-dot--info { background: var(--ops-blue); }
+.ops-stat-dot--success { background: var(--ops-green); }
+.ops-stat-dot--warning { background: var(--ops-amber); }
+.ops-stat-dot--danger { background: var(--ops-red); }
+
+.ops-stat-value {
+	font-size: 1.9rem;
+	font-weight: 800;
+	margin-top: 0.3rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.ops-stat-sub {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	margin-top: 0.15rem;
+}
+
+/* ---- Tre-kolonne hovedlayout --------------------------------------------- */
+
+.ops-columns {
+	flex: 1;
+	display: grid;
+	grid-template-columns: 1.1fr 1.5fr 1fr;
+	gap: 0.85rem;
+	min-height: 0;
+	padding: 0.85rem 1.25rem;
+}
+
+.ops-side-column {
+	display: flex;
+	flex-direction: column;
+	gap: 0.85rem;
+	min-height: 0;
+}
+
+/* [2026-07-19] Teamstatus/Advarsler er begge [hidden] indtil der findes en
+   datakilde for dem (se index.html) — uden dette ville højrekolonnen bare
+   reservere sin plads som et tomt, ubrugt tredje gitterspor. Selvhelende:
+   fjernes [hidden] fra bare ÉT af de to paneler igen (den dag der er data),
+   dukker tre-kolonne-gitteret automatisk op igen — ingen CSS at rette. */
+.ops-columns:not(:has(.ops-panel--team:not([hidden]), .ops-panel--alerts:not([hidden]))) {
+	grid-template-columns: 1.1fr 1.6fr;
+}
+
+.ops-columns:not(:has(.ops-panel--team:not([hidden]), .ops-panel--alerts:not([hidden]))) .ops-side-column {
+	display: none;
+}
+
+.ops-panel {
+	background: var(--ops-panel-bg);
+	border: 1px solid var(--panel-border);
+	border-radius: 0.6rem;
+	padding: 1.1rem 1.3rem;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.ops-panel--team,
+.ops-panel--alerts {
+	flex: 1;
+}
+
+.ops-panel-heading {
+	margin: 0;
+	font-size: 1.15rem;
+	font-weight: 800;
+}
+
+.ops-panel-subheading {
+	margin: 0.15rem 0 0.9rem;
+	font-size: 0.9rem;
+	color: var(--text-muted);
+}
+
+.ops-empty-message {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-muted);
+	font-size: 1.1rem;
+	font-style: italic;
+}
+
+/* ---- Vagtdækning ---------------------------------------------------------- */
+
+.ops-coverage-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.7rem;
+	overflow: hidden;
+	min-height: 0;
+}
+
+.ops-coverage-card {
+	background: rgba(255, 255, 255, 0.02);
+	border: 1px solid var(--panel-border);
+	border-radius: 0.5rem;
+	padding: 0.8rem 1rem;
+}
+
+.ops-coverage-card__top {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+}
+
+.ops-coverage-card__title {
+	font-size: 1.1rem;
+	font-weight: 700;
+}
+
+.ops-coverage-card__time {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.ops-coverage-card__count {
+	font-size: 1.3rem;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.ops-coverage-card__label {
+	font-size: 0.8rem;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	text-align: right;
+}
+
+.ops-coverage-card__label--full { color: var(--ops-green); }
+.ops-coverage-card__label--partial { color: var(--ops-amber); }
+.ops-coverage-card__label--empty { color: var(--ops-red); }
+
+.ops-progress-track {
+	flex: 1;
+	height: 0.5rem;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.08);
+	overflow: hidden;
+	margin-top: 0.55rem;
+}
+
+.ops-progress-fill {
+	height: 100%;
+	border-radius: 999px;
+	background: var(--ops-green);
+	transition: width 400ms ease;
+}
+
+.ops-progress-fill--partial { background: var(--ops-amber); }
+.ops-progress-fill--empty { background: var(--ops-red); }
+
+.ops-coverage-card__countdown {
+	margin-top: 0.4rem;
+	font-size: 0.85rem;
+	color: var(--text-muted);
+}
+
+.ops-coverage-trend {
+	margin-top: 1rem;
+	flex-shrink: 0;
+}
+
+/* ---- Opgavekø -------------------------------------------------------------- */
+
+.ops-queue-header {
+	display: grid;
+	grid-template-columns: 2.4fr 1fr 0.9fr 0.9fr;
+	gap: 0.75rem;
+	padding-bottom: 0.5rem;
+	border-bottom: 1px solid var(--panel-border);
+	font-size: 0.8rem;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+}
+
+.ops-queue-list {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+	overflow: hidden;
+	min-height: 0;
+	margin-top: 0.6rem;
+}
+
+.ops-queue-row {
+	display: grid;
+	grid-template-columns: 2.4fr 1fr 0.9fr 0.9fr;
+	gap: 0.75rem;
+	align-items: center;
+	padding: 0.55rem 0 0.55rem 0.85rem;
+	border-left: 3px solid var(--status-default);
+	background: rgba(255, 255, 255, 0.02);
+}
+
+.ops-queue-row--planned { border-left-color: var(--status-planned); }
+.ops-queue-row--assigned { border-left-color: var(--status-assigned); }
+.ops-queue-row--in_progress { border-left-color: var(--ops-blue); }
+.ops-queue-row--completed { border-left-color: var(--ops-green); }
+.ops-queue-row--cancelled { border-left-color: var(--ops-red); }
+
+.ops-queue-row__title {
+	font-size: 1.05rem;
+	font-weight: 700;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ops-queue-row__meta {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ops-queue-row__owner,
+.ops-queue-row__time {
+	font-size: 0.95rem;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.ops-status-pill {
+	justify-self: start;
+	padding: 0.3rem 0.7rem;
+	border-radius: 0.35rem;
+	font-size: 0.8rem;
+	font-weight: 800;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	text-align: center;
+	color: #fff;
+	background: var(--status-default);
+}
+
+.ops-status-pill--planned { background: var(--status-planned); }
+.ops-status-pill--assigned { background: var(--status-assigned); }
+.ops-status-pill--in_progress { background: var(--ops-blue); color: #06202e; }
+.ops-status-pill--completed { background: var(--ops-green); color: #06210f; }
+.ops-status-pill--cancelled { background: var(--ops-red); color: #2b0a10; }
+
+.ops-completion-bar {
+	flex-shrink: 0;
+	margin-top: 0.9rem;
+	display: flex;
+	align-items: center;
+	gap: 0.85rem;
+	padding-top: 0.85rem;
+	border-top: 1px solid var(--panel-border);
+}
+
+.ops-completion-label {
+	font-size: 0.85rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+
+.ops-completion-value {
+	font-size: 1.2rem;
+	font-weight: 800;
+	flex-shrink: 0;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- Teamstatus / Advarsler (skjult indtil datakilde findes) ------------- */
+
+.ops-team-list,
+.ops-alerts-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.65rem;
+	overflow: hidden;
+	min-height: 0;
+}
+
+.ops-team-row {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.ops-team-row__avatar {
+	width: 2.2rem;
+	height: 2.2rem;
+	border-radius: 50%;
+	background: var(--panel-border);
+	color: var(--text);
+	font-weight: 700;
+	font-size: 0.85rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.ops-team-row__name {
+	font-size: 1rem;
+	font-weight: 700;
+}
+
+.ops-team-row__role {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+
+.ops-team-row__status {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.85rem;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.ops-alert-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	background: rgba(255, 255, 255, 0.02);
+	border: 1px solid var(--panel-border);
+	border-radius: 0.4rem;
+	padding: 0.6rem 0.85rem;
+	font-size: 0.95rem;
+}
+
+.ops-footer {
+	flex-shrink: 0;
+	display: flex;
+	justify-content: space-between;
+	padding: 0.6rem 1.5rem;
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	border-top: 1px solid var(--panel-border);
 }

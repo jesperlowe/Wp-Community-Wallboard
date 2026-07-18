@@ -1,6 +1,6 @@
 {
 	"name": "wp-community-wallboard",
-	"version": "1.3.0",
+	"version": "1.4.0",
 	"description": "Let, driftssikker wallboard-/infoskærmsløsning til Raspberry Pi 3 — henter data fra WP Community Core/Operations REST-API.",
 	"private": true,
 	"license": "UNLICENSED",

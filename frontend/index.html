@@ -8,52 +8,203 @@
 	<link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-	<header class="topbar">
-		<img class="topbar-logo" id="topbar-logo" alt="" hidden />
-		<div class="topbar-title">Driftsoverblik</div>
-		<div class="topbar-date" id="current-date">–</div>
-		<div class="topbar-clock" id="current-time">--:--</div>
-		<div class="topbar-status">
-			<span class="status-dot status-dot-offline" id="source-status-dot"></span>
-			<span id="source-status-text">Starter…</span>
+	<!-- ==================================================================
+	     KLASSISK LAYOUT — det oprindelige 2×2-panelgitter.
+	     ================================================================== -->
+	<div class="layout" id="layout-classic">
+		<header class="topbar">
+			<img class="topbar-logo" id="topbar-logo" alt="" hidden />
+			<div class="topbar-title">Driftsoverblik</div>
+			<div class="topbar-date" id="current-date">–</div>
+			<button type="button" class="layout-switch" data-wpc-layout-toggle>Switch layout</button>
+			<div class="topbar-clock" id="current-time">--:--</div>
+			<div class="topbar-status">
+				<span class="status-dot status-dot-offline" id="source-status-dot"></span>
+				<span id="source-status-text">Starter…</span>
+			</div>
+			<div class="topbar-updated">
+				<span class="updating-dot" id="updating-dot" hidden></span>
+				Opdateret <span id="last-updated-time">–</span>
+			</div>
+		</header>
+
+		<div class="offline-banner" id="offline-banner" hidden></div>
+
+		<main class="board board-grid">
+			<section class="panel panel-inprogress">
+				<h2 class="panel-heading">Igangværende opgaver</h2>
+				<div class="list" id="inprogress-list"></div>
+				<p class="empty-message" id="inprogress-empty" hidden>Ingen igangværende opgaver</p>
+				<div class="page-indicator" id="inprogress-page-indicator" hidden></div>
+			</section>
+
+			<section class="panel panel-upcoming">
+				<h2 class="panel-heading" id="upcoming-heading">Kommende opgaver</h2>
+				<div class="list" id="upcoming-list"></div>
+				<p class="empty-message" id="upcoming-empty" hidden>Ingen kommende opgaver</p>
+				<div class="page-indicator" id="upcoming-page-indicator" hidden></div>
+			</section>
+
+			<section class="panel panel-completed">
+				<h2 class="panel-heading" id="completed-heading">Afsluttet i dag</h2>
+				<div class="list" id="completed-list"></div>
+				<p class="empty-message" id="completed-empty" hidden>Ingen afsluttede opgaver</p>
+				<div class="page-indicator" id="completed-page-indicator" hidden></div>
+			</section>
+
+			<section class="panel panel-shifts">
+				<h2 class="panel-heading">Vagter</h2>
+				<div class="list" id="shifts-list"></div>
+				<p class="empty-message" id="shifts-empty" hidden>Ingen vagter</p>
+				<div class="page-indicator" id="shifts-page-indicator" hidden></div>
+			</section>
+		</main>
+	</div>
+
+	<!-- ==================================================================
+	     OPS-LAYOUT — nyt, tættere driftsoverblik. Alt der kræver data vi
+	     ikke har endnu (stat-kort, teamstatus, advarsler, dækningstendens)
+	     er bygget helt færdigt i markup/CSS, men holdt [hidden] indtil der
+	     rent faktisk findes en datakilde for det — se ops-*-panelernes
+	     kommentarer i app.js for hvilke felter der mangler.
+	     ================================================================== -->
+	<div class="layout" id="layout-ops" hidden>
+		<header class="ops-topbar">
+			<div class="ops-topbar-brand">
+				<img class="ops-topbar-logo-img" id="ops-topbar-logo" alt="" hidden />
+				<div class="ops-topbar-logo-badge" id="ops-topbar-logo-badge">F</div>
+				<div>
+					<div class="ops-topbar-title">Driftsoverblik</div>
+					<div class="ops-topbar-subtitle">OPGAVER &middot; VAGTER &middot; STATUS</div>
+				</div>
+			</div>
+			<div class="ops-topbar-right">
+				<span class="ops-pill ops-pill--live" id="ops-live-pill">LIVE</span>
+				<span class="ops-pill ops-pill--demo" id="ops-demo-pill" hidden>DEMO DATA</span>
+				<button type="button" class="layout-switch" data-wpc-layout-toggle>Switch layout</button>
+				<div class="ops-topbar-datetime">
+					<div class="ops-topbar-date" id="ops-current-date">–</div>
+					<div class="ops-topbar-clock" id="ops-current-time">--:--</div>
+				</div>
+			</div>
+		</header>
+
+		<div class="offline-banner" id="ops-offline-banner" hidden></div>
+
+		<!-- Stat-kort — ingen af disse tal beregnes endnu (kræver SLA-/
+		     hændelses-/vagtnorm-data vi ikke har). Struktur+stil er klar;
+		     fjern blot [hidden] og udfyld renderOpsStats() i app.js når en
+		     rigtig datakilde findes. -->
+		<div class="ops-stats" id="ops-stats" hidden>
+			<div class="ops-stat-card">
+				<div class="ops-stat-card__top">
+					<span class="ops-stat-label">ON SHIFT</span>
+					<span class="ops-stat-dot ops-stat-dot--info"></span>
+				</div>
+				<div class="ops-stat-value" id="ops-stat-onshift">–</div>
+				<div class="ops-stat-sub" id="ops-stat-onshift-sub">–</div>
+			</div>
+			<div class="ops-stat-card">
+				<div class="ops-stat-card__top">
+					<span class="ops-stat-label">TASKS DONE</span>
+					<span class="ops-stat-dot ops-stat-dot--success"></span>
+				</div>
+				<div class="ops-stat-value" id="ops-stat-tasksdone">–</div>
+				<div class="ops-stat-sub" id="ops-stat-tasksdone-sub">–</div>
+			</div>
+			<div class="ops-stat-card">
+				<div class="ops-stat-card__top">
+					<span class="ops-stat-label">AT RISK</span>
+					<span class="ops-stat-dot ops-stat-dot--warning"></span>
+				</div>
+				<div class="ops-stat-value" id="ops-stat-atrisk">–</div>
+				<div class="ops-stat-sub" id="ops-stat-atrisk-sub">–</div>
+			</div>
+			<div class="ops-stat-card">
+				<div class="ops-stat-card__top">
+					<span class="ops-stat-label">SLA HEALTH</span>
+					<span class="ops-stat-dot ops-stat-dot--success"></span>
+				</div>
+				<div class="ops-stat-value" id="ops-stat-sla">–</div>
+				<div class="ops-stat-sub" id="ops-stat-sla-sub">–</div>
+			</div>
+			<div class="ops-stat-card">
+				<div class="ops-stat-card__top">
+					<span class="ops-stat-label">INCIDENTS</span>
+					<span class="ops-stat-dot ops-stat-dot--danger"></span>
+				</div>
+				<div class="ops-stat-value" id="ops-stat-incidents">–</div>
+				<div class="ops-stat-sub" id="ops-stat-incidents-sub">–</div>
+			</div>
 		</div>
-		<div class="topbar-updated">
-			<span class="updating-dot" id="updating-dot" hidden></span>
-			Opdateret <span id="last-updated-time">–</span>
+
+		<div class="ops-columns">
+			<!-- Vagtdækning — reel data (WPC_Shifts via wordpress-adapter.js). -->
+			<section class="ops-panel ops-panel--coverage">
+				<h2 class="ops-panel-heading">Vagtdækning</h2>
+				<p class="ops-panel-subheading">Kommende og aktuelle vagter</p>
+
+				<div class="ops-coverage-list" id="ops-coverage-list"></div>
+				<p class="ops-empty-message" id="ops-coverage-empty" hidden>Ingen vagter</p>
+
+				<!-- Dækningstendens — kræver historik (flere dages data), som
+				     wallboardet ikke gemmer i dag (kun det aktuelle øjebliksbillede
+				     fra WordPress). -->
+				<div class="ops-coverage-trend" id="ops-coverage-trend" hidden>
+					<h3 class="ops-panel-subheading">DÆKNINGSTENDENS</h3>
+					<div class="ops-sparkline" id="ops-sparkline"></div>
+				</div>
+			</section>
+
+			<!-- Opgavekø — reel data (igangværende + kommende opgaver). -->
+			<section class="ops-panel ops-panel--queue">
+				<h2 class="ops-panel-heading">Opgavekø</h2>
+				<p class="ops-panel-subheading">Prioriteret arbejde lige nu</p>
+
+				<div class="ops-queue-header">
+					<span>OPGAVE</span>
+					<span>ANSVARLIG</span>
+					<span>TID</span>
+					<span>STATUS</span>
+				</div>
+				<div class="ops-queue-list" id="ops-queue-list"></div>
+				<p class="ops-empty-message" id="ops-queue-empty" hidden>Ingen opgaver i køen</p>
+
+				<div class="ops-completion-bar">
+					<span class="ops-completion-label">OPGAVER I DAG</span>
+					<div class="ops-progress-track">
+						<div class="ops-progress-fill" id="ops-completion-fill"></div>
+					</div>
+					<span class="ops-completion-value" id="ops-completion-value">–</span>
+				</div>
+			</section>
+
+			<div class="ops-side-column">
+				<!-- Teamstatus — kræver individuel tilstedeværelse/status pr.
+				     person, som WordPress-API'et ikke leverer i dag (kun hvem der
+				     er tilknyttet en vagt/opgave, ikke om de reelt er
+				     ledige/optagede lige nu). -->
+				<section class="ops-panel ops-panel--team" id="ops-team-panel" hidden>
+					<h2 class="ops-panel-heading">Teamstatus</h2>
+					<p class="ops-panel-subheading">Aktuel tilgængelighed</p>
+					<div class="ops-team-list" id="ops-team-list"></div>
+				</section>
+
+				<!-- Advarsler & overlevering — kræver et hændelses-/advarselssystem
+				     der ikke findes endnu. -->
+				<section class="ops-panel ops-panel--alerts" id="ops-alerts-panel" hidden>
+					<h2 class="ops-panel-heading">Advarsler &amp; overlevering</h2>
+					<p class="ops-panel-subheading">Kræver opmærksomhed</p>
+					<div class="ops-alerts-list" id="ops-alerts-list"></div>
+				</section>
+			</div>
 		</div>
-	</header>
 
-	<div class="offline-banner" id="offline-banner" hidden></div>
-
-	<main class="board board-grid">
-		<section class="panel panel-inprogress">
-			<h2 class="panel-heading">Igangværende opgaver</h2>
-			<div class="list" id="inprogress-list"></div>
-			<p class="empty-message" id="inprogress-empty" hidden>Ingen igangværende opgaver</p>
-			<div class="page-indicator" id="inprogress-page-indicator" hidden></div>
-		</section>
-
-		<section class="panel panel-upcoming">
-			<h2 class="panel-heading" id="upcoming-heading">Kommende opgaver</h2>
-			<div class="list" id="upcoming-list"></div>
-			<p class="empty-message" id="upcoming-empty" hidden>Ingen kommende opgaver</p>
-			<div class="page-indicator" id="upcoming-page-indicator" hidden></div>
-		</section>
-
-		<section class="panel panel-completed">
-			<h2 class="panel-heading" id="completed-heading">Afsluttet i dag</h2>
-			<div class="list" id="completed-list"></div>
-			<p class="empty-message" id="completed-empty" hidden>Ingen afsluttede opgaver</p>
-			<div class="page-indicator" id="completed-page-indicator" hidden></div>
-		</section>
-
-		<section class="panel panel-shifts">
-			<h2 class="panel-heading">Vagter</h2>
-			<div class="list" id="shifts-list"></div>
-			<p class="empty-message" id="shifts-empty" hidden>Ingen vagter</p>
-			<div class="page-indicator" id="shifts-page-indicator" hidden></div>
-		</section>
-	</main>
+		<div class="ops-footer">
+			<span>Opdateres automatisk</span>
+			<span id="ops-footer-updated">Sidst opdateret –</span>
+		</div>
+	</div>
 
 	<script src="status-map.js"></script>
 	<script src="app.js"></script>
