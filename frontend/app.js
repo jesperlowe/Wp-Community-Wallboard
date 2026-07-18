@@ -209,7 +209,20 @@
 			var pages = totalPages();
 			if (pages > 1) {
 				var viewHeight = listEl.clientHeight;
-				var current = viewHeight > 0 ? Math.round(listEl.scrollTop / viewHeight) : 0;
+				var maxScroll = listEl.scrollHeight - viewHeight;
+				// [2026-07-18] Sidste stop er klampet til maxScroll (se tick()),
+				// ikke nødvendigvis et helt multiplum af viewHeight — et rent
+				// scrollTop/viewHeight-regnestykke viste derfor stadig "1/2", selv
+				// når rækken reelt stod nede ved bunden (fx 98px scrollTop i en
+				// 314px rude: 98/314 runder ned til 0, ikke 1).
+				var current;
+				if (viewHeight <= 0) {
+					current = 0;
+				} else if (listEl.scrollTop >= maxScroll - 4) {
+					current = pages - 1;
+				} else {
+					current = Math.round(listEl.scrollTop / viewHeight);
+				}
 				indicatorEl.hidden = false;
 				indicatorEl.textContent = current + 1 + ' / ' + pages;
 			} else {
@@ -250,8 +263,19 @@
 			var maxScroll = listEl.scrollHeight - viewHeight;
 			if (maxScroll <= 4) return; // alt indhold er allerede synligt — intet at scrolle til
 
-			var next = listEl.scrollTop + viewHeight;
-			listEl.scrollTo({ top: next >= maxScroll - 4 ? 0 : next, behavior: 'smooth' });
+			// [2026-07-18, bugfix] scrollTop + viewHeight kunne overskyde maxScroll
+			// i ét hop, når indholdet kun er lidt højere end en skærmhøjde (fx
+			// 98px overflow i en 314px rude) — så ramte "er vi ved bunden?"-tjekket
+			// allerede på FØRSTE tick, og hoppede direkte til "spring til toppen"
+			// (top: 0), som var et no-op, da den allerede stod på 0. Resultatet var
+			// at panelet aldrig rørte sig ved delvis overflow (mindre end én ekstra
+			// skærmhøjde) — kun ved SÅ meget indhold at et helt skærmhøjde-hop
+			// naturligt landede før bunden. Klamper nu til maxScroll i stedet for
+			// at hoppe forbi den, så den delvist skjulte rest rent faktisk vises,
+			// før næste tick springer tilbage til toppen.
+			var atBottom = listEl.scrollTop >= maxScroll - 4;
+			var next = atBottom ? 0 : Math.min(listEl.scrollTop + viewHeight, maxScroll);
+			listEl.scrollTo({ top: next, behavior: 'smooth' });
 
 			// Indikatoren opdateres lidt forsinket, så den matcher den nye
 			// scroll-position (scrollTo animerer asynkront).
