@@ -457,19 +457,71 @@
 		}
 	}
 
+	// ---- Layout-skift (klassisk ↔ ops) --------------------------------------
+	// [2026-07-19] To komplette layouts ligger side om side i DOM'en (se
+	// index.html) — kun det aktive er synligt ([hidden] på det andet). Valget
+	// gemmes i localStorage, så det samme kiosk-skærmbillede bliver ved med at
+	// vise det layout personalet sidst valgte, også efter en genindlæsning.
+	(function setupLayoutToggle() {
+		var STORAGE_KEY = 'wallboardLayout';
+		var layoutClassic = document.getElementById('layout-classic');
+		var layoutOps = document.getElementById('layout-ops');
+		var toggleButtons = document.querySelectorAll('[data-wpc-layout-toggle]');
+
+		function readStoredLayout() {
+			try {
+				return window.localStorage.getItem(STORAGE_KEY) === 'ops' ? 'ops' : 'classic';
+			} catch (e) {
+				// Privat browsing/deaktiveret localStorage — falder blot tilbage
+				// til klassisk hver gang, ingen anden konsekvens.
+				return 'classic';
+			}
+		}
+
+		function applyLayout(name) {
+			var showOps = name === 'ops';
+			layoutClassic.hidden = showOps;
+			layoutOps.hidden = !showOps;
+		}
+
+		function setLayout(name) {
+			applyLayout(name);
+			try {
+				window.localStorage.setItem(STORAGE_KEY, name);
+			} catch (e) {
+				// Se readStoredLayout() ovenfor — ingen konsekvens ud over at
+				// valget ikke huskes til næste indlæsning.
+			}
+		}
+
+		for (var i = 0; i < toggleButtons.length; i++) {
+			toggleButtons[i].addEventListener('click', function () {
+				setLayout(readStoredLayout() === 'ops' ? 'classic' : 'ops');
+			});
+		}
+
+		applyLayout(readStoredLayout());
+	})();
+
 	// ---- Kiosk-exit-gestus (tredobbelt-tryk på logoet) -------------------
 	// Ingen tastatur/mus på et kiosk-skærmbillede — tre tryk inden for ét
 	// sekund er en gestus der aldrig sker ved uheld, men som personalet kan
 	// huske. Selve afslutningen (Chromium lukkes, vender tilbage til en
 	// terminal) sker i deployment/kiosk-autostart.sh, som poller
 	// /api/kiosk/exit-status — denne handler sætter blot signalet.
-	(function setupKioskExitGesture() {
+	//
+	// [2026-07-19] Bundet til BÅDE det klassiske layouts logo og ops-layoutets
+	// logo-badge — gestussen skal virke uanset hvilket af de to layouts der
+	// aktuelt er synligt, ikke kun det først byggede.
+	function setupKioskExitGesture(triggerEl) {
+		if (!triggerEl) return;
+
 		var TAP_WINDOW_MS = 1000;
 		var TAPS_REQUIRED = 3;
 		var tapTimestamps = [];
 		var requestInFlight = false;
 
-		topbarLogo.addEventListener('click', function () {
+		triggerEl.addEventListener('click', function () {
 			var now = Date.now();
 			tapTimestamps = tapTimestamps.filter(function (t) {
 				return now - t < TAP_WINDOW_MS;
@@ -489,7 +541,198 @@
 					requestInFlight = false;
 				});
 		});
-	})();
+	}
+
+	setupKioskExitGesture(topbarLogo);
+	setupKioskExitGesture(document.getElementById('ops-topbar-logo-badge'));
+	setupKioskExitGesture(document.getElementById('ops-topbar-logo'));
+
+	// ---- Ops-layout: rendering ------------------------------------------------
+	// [2026-07-19] Bevidst kun to renderede sektioner her: "Vagtdækning" og
+	// "Opgavekø" — de eneste dele af ops-layoutet der har en reel, allerede
+	// tilgængelig datakilde (WPC_Shifts/WPC_Tasks via /api/wallboard). Stat-
+	// kortene, teamstatus, advarsler og dækningstendensen i index.html er
+	// bevidst [hidden] og har INGEN tilsvarende renderfunktion her — de kræver
+	// data (SLA/hændelser/individuel tilstedeværelse/historik) der ikke findes
+	// endnu. Fjern [hidden] og tilføj en renderfunktion i samme stil, DEN dag
+	// en rigtig datakilde findes — undgå at gætte tal i mellemtiden.
+
+	var opsLivePill = document.getElementById('ops-live-pill');
+	var opsDemoPill = document.getElementById('ops-demo-pill');
+	var opsOfflineBanner = document.getElementById('ops-offline-banner');
+	var opsFooterUpdated = document.getElementById('ops-footer-updated');
+
+	function updateOpsMeta(json) {
+		var online = json.sourceStatus === 'online' && !json.stale;
+		opsLivePill.textContent = online ? 'LIVE' : 'OFFLINE';
+		opsLivePill.classList.toggle('ops-pill--live', online);
+		opsLivePill.classList.toggle('ops-pill--offline', !online);
+
+		// [2026-07-19] Kun sat én gang (apiMode ændrer sig ikke i løbet af en
+		// session) — en ærlig markør så mock-data fra lokal udvikling aldrig
+		// kan forveksles med rigtig drift på en faktisk kiosk-skærm.
+		if (CONFIG.apiMode === 'mock') {
+			opsDemoPill.hidden = false;
+		}
+
+		if (json.stale) {
+			opsOfflineBanner.hidden = false;
+			opsOfflineBanner.textContent =
+				json.cacheAgeSeconds === null || json.cacheAgeSeconds === undefined
+					? 'Offline – ingen data modtaget fra WordPress endnu'
+					: 'Offline – viser senest hentede data · ' + formatAge(json.cacheAgeSeconds);
+		} else {
+			opsOfflineBanner.hidden = true;
+		}
+
+		var generated = safeDate(json.generatedAt);
+		opsFooterUpdated.textContent = 'Sidst opdateret ' + (generated ? formatClockSeconds(generated) : '–');
+	}
+
+	/** "Starter om X"/"Slutter om X" — samme relative sprog som resten af wallboardet (se formatAge()). */
+	function opsCoverageCountdown(startIso, endIso) {
+		var now = Date.now();
+		var startMs = startIso ? Date.parse(startIso) : NaN;
+		var endMs = endIso ? Date.parse(endIso) : NaN;
+		if (!isNaN(startMs) && startMs > now) {
+			return 'Starter om ' + formatAge((startMs - now) / 1000);
+		}
+		if (!isNaN(endMs) && endMs > now) {
+			return 'Slutter om ' + formatAge((endMs - now) / 1000);
+		}
+		return '';
+	}
+
+	function renderOpsCoverageCard(shift) {
+		var card = el('div', 'ops-coverage-card');
+
+		var top = el('div', 'ops-coverage-card__top');
+		var left = el('div');
+		left.appendChild(el('div', 'ops-coverage-card__title', shift.title || 'Vagt'));
+		var start = safeDate(shift.startTime);
+		var end = safeDate(shift.endTime);
+		left.appendChild(el('span', 'ops-coverage-card__time', start && end ? formatClock(start) + '–' + formatClock(end) : '–'));
+		top.appendChild(left);
+
+		var userCount = typeof shift.userCount === 'number' ? shift.userCount : 0;
+		var hasMax = typeof shift.maxUsers === 'number' && shift.maxUsers > 0;
+		var ratio = hasMax ? userCount / shift.maxUsers : (userCount > 0 ? 1 : 0);
+
+		var labelClass = 'ops-coverage-card__label--empty';
+		var labelText = 'INGEN TILMELDT';
+		var fillModifier = 'ops-progress-fill--empty';
+		if (hasMax && userCount >= shift.maxUsers && userCount > 0) {
+			labelClass = 'ops-coverage-card__label--full';
+			labelText = 'FULDT DÆKKET';
+			fillModifier = '';
+		} else if (hasMax && userCount > 0) {
+			labelClass = 'ops-coverage-card__label--partial';
+			labelText = (shift.maxUsers - userCount) + ' PLADSER ÅBNE';
+			fillModifier = 'ops-progress-fill--partial';
+		} else if (!hasMax && userCount > 0) {
+			labelClass = 'ops-coverage-card__label--full';
+			labelText = 'ÅBEN, UBEGRÆNSET';
+			fillModifier = '';
+		}
+
+		var right = el('div');
+		right.appendChild(el('div', 'ops-coverage-card__count', hasMax ? userCount + ' / ' + shift.maxUsers : userCount + ' tilmeldt'));
+		right.appendChild(el('div', 'ops-coverage-card__label ' + labelClass, labelText));
+		top.appendChild(right);
+		card.appendChild(top);
+
+		var track = el('div', 'ops-progress-track');
+		var fill = el('div', 'ops-progress-fill' + (fillModifier ? ' ' + fillModifier : ''));
+		fill.style.width = Math.max(0, Math.min(1, ratio)) * 100 + '%';
+		track.appendChild(fill);
+		card.appendChild(track);
+
+		var countdown = opsCoverageCountdown(shift.startTime, shift.endTime);
+		if (countdown) {
+			card.appendChild(el('div', 'ops-coverage-card__countdown', countdown));
+		}
+
+		return card;
+	}
+
+	function renderOpsCoverage(shifts) {
+		var list = document.getElementById('ops-coverage-list');
+		var empty = document.getElementById('ops-coverage-empty');
+		list.innerHTML = '';
+
+		if (!shifts.length) {
+			list.hidden = true;
+			empty.hidden = false;
+			return;
+		}
+
+		list.hidden = false;
+		empty.hidden = true;
+		shifts.forEach(function (shift) {
+			list.appendChild(renderOpsCoverageCard(shift));
+		});
+	}
+
+	function renderOpsQueueRow(task, timeIso) {
+		var statusKey = task.status || 'default';
+		var row = el('div', 'ops-queue-row ops-queue-row--' + statusKey);
+
+		var titleCol = el('div');
+		titleCol.appendChild(el('div', 'ops-queue-row__title', task.title || 'Uden titel'));
+		titleCol.appendChild(el('div', 'ops-queue-row__meta', task.taskNumber || ''));
+		row.appendChild(titleCol);
+
+		var ownerText = Array.isArray(task.assignedNames) && task.assignedNames.length > 0
+			? task.assignedNames.join(', ')
+			: '–';
+		row.appendChild(el('span', 'ops-queue-row__owner', ownerText));
+
+		var timeDate = timeIso ? new Date(timeIso) : null;
+		row.appendChild(el('span', 'ops-queue-row__time', timeDate ? formatClock(timeDate) : '–'));
+
+		row.appendChild(el('span', 'ops-status-pill ops-status-pill--' + statusKey, statusMap.translateStatus(task.status)));
+
+		return row;
+	}
+
+	/**
+	 * Slår igangværende og kommende opgaver sammen til én prioriteret kø
+	 * (igangværende først — allerede sorteret ældst-startet-først af serveren,
+	 * se sortInProgress() i wordpress-adapter.js — derefter kommende, allerede
+	 * sorteret snarest-først af filterAndSortUpcoming()). Ingen selvstændig
+	 * gensortering nødvendig her.
+	 */
+	function renderOpsQueue(inProgress, upcoming) {
+		var list = document.getElementById('ops-queue-list');
+		var empty = document.getElementById('ops-queue-empty');
+		list.innerHTML = '';
+
+		if (inProgress.length === 0 && upcoming.length === 0) {
+			list.hidden = true;
+			empty.hidden = false;
+			return;
+		}
+
+		list.hidden = false;
+		empty.hidden = true;
+		inProgress.forEach(function (task) {
+			list.appendChild(renderOpsQueueRow(task, task.startedAt));
+		});
+		upcoming.forEach(function (task) {
+			list.appendChild(renderOpsQueueRow(task, task.scheduledAt));
+		});
+	}
+
+	/** Andelen af de opgaver wallboardet kender til i dag, der er afsluttet — samme tal som ville fodre en fremtidig "TASKS DONE"-stat. */
+	function updateOpsCompletion(inProgress, completed, upcoming) {
+		var fill = document.getElementById('ops-completion-fill');
+		var value = document.getElementById('ops-completion-value');
+		var total = inProgress.length + completed.length + upcoming.length;
+		var pct = total > 0 ? Math.round((completed.length / total) * 100) : 0;
+
+		fill.style.width = pct + '%';
+		value.textContent = total > 0 ? pct + '% · ' + completed.length + ' af ' + total : '–';
+	}
 
 	// ---- Data-polling med eksponentiel backoff ved fejl -----------------------
 
@@ -501,6 +744,7 @@
 		updateMeta(json);
 		updateOfflineBanner(json);
 		updateBranding(json);
+		updateOpsMeta(json);
 
 		var tasks = json.tasks || {};
 		var inProgress = Array.isArray(tasks.inProgress) ? tasks.inProgress : [];
@@ -531,6 +775,15 @@
 			lastRenderedJson.shifts = shKey;
 			shiftsPaginator.setItems(shifts, PAGE_SIZE.shifts);
 		}
+
+		// [2026-07-19] Ops-layoutet opdateres hver gang, uanset om det aktuelt
+		// er synligt — ikke bag samme JSON-diff-værn som ovenfor (de billige
+		// render-funktioner har intet scroll-/animationstilstand at bevare,
+		// modsat autoscroller-panelerne), så et layoutskift altid viser frisk
+		// data med det samme i stedet for at vente på næste hentning.
+		renderOpsCoverage(shifts);
+		renderOpsQueue(inProgress, upcoming);
+		updateOpsCompletion(inProgress, completed, upcoming);
 	}
 
 	function scheduleFetch(delayMs) {
@@ -579,11 +832,20 @@
 
 	var currentTimeEl = document.getElementById('current-time');
 	var currentDateEl = document.getElementById('current-date');
+	var opsCurrentTimeEl = document.getElementById('ops-current-time');
+	var opsCurrentDateEl = document.getElementById('ops-current-date');
+
+	/** Kort format til ops-topbjælken (fx "LØR. 18. JUL.") — modsat den lange, fulde dato i det klassiske layout. */
+	function formatShortDate(date) {
+		return date.toLocaleDateString('da-DK', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
+	}
 
 	function tickClock() {
 		var now = new Date();
 		currentTimeEl.textContent = formatClock(now);
 		currentDateEl.textContent = formatDate(now);
+		opsCurrentTimeEl.textContent = formatClock(now);
+		opsCurrentDateEl.textContent = formatShortDate(now);
 	}
 
 	// ---- Init ---------------------------------------------------------------

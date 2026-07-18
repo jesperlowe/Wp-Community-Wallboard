@@ -148,6 +148,10 @@ function createServer(config) {
 			upcomingTaskLimit: config.upcomingTaskLimit,
 			upcomingLookaheadHours: config.upcomingLookaheadHours,
 			pageIntervalSeconds: PAGE_INTERVAL_SECONDS,
+			// [2026-07-19] Ikke følsomt (samme værdi som /health's "mode") —
+			// bruges af ops-layoutet til en ærlig "DEMO DATA"-mærkat, så
+			// mock-data aldrig kan forveksles med rigtig drift.
+			apiMode: config.apiMode,
 		};
 		const script = `<script>window.WALLBOARD_CONFIG = ${JSON.stringify(publicConfig)};</script>`;
 		return html.includes('</head>') ? html.replace('</head>', `${script}</head>`) : `${script}${html}`;
