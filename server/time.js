@@ -74,6 +74,18 @@ function dateKeyInTimezone(instantMs, timeZone) {
 }
 
 /**
+ * [2026-07-19] Sandt hvis $value allerede bærer et eksplicit offset (Z eller
+ * ±HH:MM) og derfor er et ABSOLUT tidspunkt — sådan en værdi må ALDRIG sendes
+ * gennem combineDateTime() nedenfor, som antager det modsatte (en "nøgen",
+ * tidszone-løs lokal streng). At gøre det ville lægge wallboardets
+ * konfigurerede offset oveni et allerede tilstedeværende offset — en dobbelt
+ * tidszonekonvertering. Se parseShiftDateTime() i wordpress-adapter.js.
+ */
+function hasExplicitTimezone(value) {
+	return typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/i.test(value.trim());
+}
+
+/**
  * Kombinér en "nøgen" lokal dato+klokkeslæt (som WP's shift_date/start_time)
  * til en korrekt ISO 8601-streng med offset for $timeZone. To iterationer for
  * at håndtere kanttilfælde nær et sommertidsskift.
@@ -105,4 +117,4 @@ function addDays(dateStr, days) {
 	return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 }
 
-module.exports = { nowIso, todayInTimezone, dateKeyInTimezone, combineDateTime, formatInstantIso, addDays };
+module.exports = { nowIso, todayInTimezone, dateKeyInTimezone, combineDateTime, formatInstantIso, addDays, hasExplicitTimezone };

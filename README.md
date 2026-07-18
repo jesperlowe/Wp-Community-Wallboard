@@ -125,6 +125,33 @@ kendte logo beholdes blot.
 findes kun (og er da altid fornavne, aldrig fulde navne) når `SHOW_SHIFT_NAMES=true`
 — som standard er feltet fuldstændig fraværende, matcher "ingen deltagere vises".
 
+### Tidszone-kontrakt
+
+`server/wordpress-adapter.js`s `parseShiftDateTime()` (kaldt af `mapShift()`)
+håndterer BEGGE de former WordPress' `/shifts`-endpoint kan levere
+`start_time`/`end_time` i:
+
+- **Uden offset** (dagens format, fx `"2026-07-16 08:00:00"`) — tolkes som en
+  "nøgen" lokal streng i den konfigurerede `TIMEZONE` (`.env`) og kombineres
+  til korrekt ISO 8601+offset via `time.js`s `combineDateTime()`.
+- **Med eksplicit offset** (`Z` eller `±HH:MM`, fx `"2026-07-16T08:00:00+02:00"`)
+  — genfortolkes ALDRIG som endnu en nøgen lokal streng (det ville lægge
+  `TIMEZONE`s offset oveni et allerede tilstedeværende offset, en dobbelt
+  konvertering) — parses i stedet direkte som et absolut tidspunkt
+  (`time.hasExplicitTimezone()` afgør hvilken vej der bruges).
+
+Opgavernes `startedAt`/`completedAt`/`scheduledAt` går IKKE gennem
+`combineDateTime()` — WordPress' opgave-REST-API (`WPC_Tasks::format_task()`)
+sender allerede ISO 8601 med korrekt offset for disse felter (se
+klan-rover-operations' README/CODEBASE.md for baggrunden), og
+`toIsoOrNull()` her i wallboardet validerer blot og lader værdien passere
+uændret — ingen genberegning, ingen risiko for dobbeltkonvertering.
+
+Frontend (`frontend/app.js`) parser altid disse ISO-strenge som absolutte
+tidspunkter (`new Date(iso)`) og formaterer dernæst med enhedens/browserens
+egen lokale tidszone (`toLocaleTimeString('da-DK', {hour:'2-digit', minute:'2-digit', hour12:false})`,
+giver `HH:mm`) — der lægges aldrig et ekstra offset til manuelt.
+
 ### `GET /health`
 
 ```json

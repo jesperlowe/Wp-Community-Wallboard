@@ -211,6 +211,66 @@ test('mapShift: manglende max_users/location/description fejler ikke', () => {
 	assert.doesNotThrow(() => adapter.mapShift(raw, baseConfig));
 });
 
+// -----------------------------------------------------------------------
+// [2026-07-19] parseShiftDateTime: eksplicit ISO 8601-offset skal respekteres
+// som et absolut tidspunkt, ALDRIG genfortolkes som endnu et "nøgent" lokalt
+// klokkeslæt (dobbelt tidszonekonvertering) — se time.js' hasExplicitTimezone().
+// -----------------------------------------------------------------------
+
+test('parseShiftDateTime: eksplicit +02:00-offset respekteres — svarer til korrekt UTC-instant, ikke en fejlagtig dobbeltkonvertering', () => {
+	const iso = adapter.parseShiftDateTime('2026-07-16T08:00:00+02:00', '2026-01-01', 'Europe/Copenhagen');
+	assert.notEqual(iso, null);
+	// 08:00 sommer-lokal (+02:00) = 06:00 UTC. En fejlagtig dobbeltkonvertering
+	// (genfortolker "08:00:00" som endnu et nøgent lokalt klokkeslæt) ville i
+	// stedet give samme lokale klokkeslæt igen (08:00, ikke 06:00 UTC).
+	assert.equal(new Date(iso).toISOString(), '2026-07-16T06:00:00.000Z');
+});
+
+test('parseShiftDateTime: eksplicit +02:00-offset vises stadig som 08:00 i Europe/Copenhagen (en sommerdato)', () => {
+	const iso = adapter.parseShiftDateTime('2026-07-16T08:00:00+02:00', '2026-01-01', 'Europe/Copenhagen');
+	const local = new Intl.DateTimeFormat('da-DK', { timeZone: 'Europe/Copenhagen', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+	assert.equal(local, '08.00');
+});
+
+test('parseShiftDateTime: Z (UTC) respekteres direkte — svarer IKKE til det tal-for-tal identiske lokale klokkeslæt', () => {
+	const iso = adapter.parseShiftDateTime('2026-07-16T08:00:00Z', '2026-01-01', 'Europe/Copenhagen');
+	assert.notEqual(iso, null);
+	assert.equal(new Date(iso).toISOString(), '2026-07-16T08:00:00.000Z');
+	// Havde koden fejlagtigt genfortolket "08:00:00" som lokal Europe/Copenhagen-tid,
+	// ville UTC-instansen være 06:00Z (sommertid), ikke de korrekte 08:00Z.
+	assert.notEqual(new Date(iso).toISOString(), '2026-07-16T06:00:00.000Z');
+});
+
+test('parseShiftDateTime: værdi uden offset fortolkes fortsat i wallboardets konfigurerede tidszone (ingen regression)', () => {
+	const iso = adapter.parseShiftDateTime('2026-07-16 08:00:00', '2026-01-01', 'Europe/Copenhagen');
+	assert.equal(iso, '2026-07-16T08:00:00+02:00');
+	assert.equal(new Date(iso).toISOString(), '2026-07-16T06:00:00.000Z');
+});
+
+test('parseShiftDateTime: sommertid (CEST, +02:00) og vintertid (CET, +01:00) giver hver deres korrekte offset for samme nøgne klokkeslæt', () => {
+	const summer = adapter.parseShiftDateTime('2026-07-16 08:00:00', '2026-01-01', 'Europe/Copenhagen');
+	const winter = adapter.parseShiftDateTime('2026-01-16 08:00:00', '2026-01-01', 'Europe/Copenhagen');
+	assert.equal(summer, '2026-07-16T08:00:00+02:00');
+	assert.equal(winter, '2026-01-16T08:00:00+01:00');
+	// Samme lokale klokkeslæt (08:00), men forskudt én time i UTC alt efter sæson.
+	assert.equal(new Date(summer).getUTCHours(), 6);
+	assert.equal(new Date(winter).getUTCHours(), 7);
+});
+
+test('parseShiftDateTime: rundt om selve sommertidsskiftet (sidste søndag i marts, Europe/Copenhagen) — 2026-03-29 kl. 02:00→03:00', () => {
+	// combineDateTime()'s to-trins-genberegning skal håndtere dette uden at
+	// kaste eller give et forkert offset for et klokkeslæt lige før/efter skiftet.
+	const before = adapter.parseShiftDateTime('2026-03-29 01:00:00', '2026-01-01', 'Europe/Copenhagen');
+	const after = adapter.parseShiftDateTime('2026-03-29 04:00:00', '2026-01-01', 'Europe/Copenhagen');
+	assert.equal(before, '2026-03-29T01:00:00+01:00');
+	assert.equal(after, '2026-03-29T04:00:00+02:00');
+});
+
+test('parseShiftDateTime: ugyldig/vrøvl-værdi giver null, ikke et forkert (men gyldigt udseende) tidspunkt', () => {
+	assert.equal(adapter.parseShiftDateTime('ikke-en-dato', '2026-07-16', 'Europe/Copenhagen'), null);
+	assert.equal(adapter.parseShiftDateTime('2026-13-99T99:99:00+02:00', '2026-07-16', 'Europe/Copenhagen'), null);
+});
+
 test('filterAndSortShifts: aktuelle vagter før kommende, afsluttede vagter (endTime i fortiden) filtreres væk', () => {
 	const nowMs = Date.now();
 	const raw = mockData.mockShiftsResponse(nowMs).data;

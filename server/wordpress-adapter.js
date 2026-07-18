@@ -264,10 +264,24 @@ function filterAndSortUpcoming(mappedTasks, config, nowMs = Date.now()) {
  * bruges direkte (ignorerer shift_date); et bart klokkeslæt (defensivt, i
  * tilfælde af en ældre/anden WP-version) kombineres i stedet med shift_date
  * som hidtil.
+ *
+ * [2026-07-19, bugfix] WordPress' /shifts-endpoint sender i dag altid
+ * tidszone-løse strenge (se ovenstående kommentar), men denne funktion
+ * genfortolkede FØR denne rettelse ubetinget ALT som en sådan — havde en
+ * værdi allerede et eksplicit offset (fx "2026-07-16T08:00:00+02:00" fra en
+ * fremtidig REST-ændring, eller en test-fixture), blev det offset stille
+ * ignoreret og klokkeslættet regnet om IGEN via wallboardets konfigurerede
+ * tidszone: en dobbelt konvertering. En værdi med Z/±HH:MM er allerede et
+ * absolut tidspunkt og skal parses som sådan, aldrig gennem combineDateTime().
  */
 function parseShiftDateTime(value, fallbackDateStr, timeZone) {
 	const str = toStr(value);
 	if (!str) return null;
+
+	if (time.hasExplicitTimezone(str)) {
+		const instantMs = Date.parse(str);
+		return Number.isNaN(instantMs) ? null : time.formatInstantIso(instantMs, timeZone);
+	}
 
 	const withDate = str.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/);
 	if (withDate) {
