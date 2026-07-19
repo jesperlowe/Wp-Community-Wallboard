@@ -64,6 +64,14 @@
 		return weekday + ' ' + date.getDate() + '. ' + month;
 	}
 
+	// Kort dato til inline-brug i kompakte kort (fx "19. juli") — for lang
+	// til formatDate() (fuldt ugedagsnavn) og for råbende til formatShortDate()
+	// (forkortet/versal, brugt i topbaren).
+	function formatShiftCardDate(date) {
+		var month = date.toLocaleDateString('da-DK', { month: 'long' });
+		return date.getDate() + '. ' + month;
+	}
+
 	function formatAge(seconds) {
 		seconds = Math.max(0, Math.round(seconds || 0));
 		if (seconds < 60) return seconds + ' sek.';
@@ -609,9 +617,25 @@
 		var top = el('div', 'ops-coverage-card__top');
 		var left = el('div');
 		left.appendChild(el('div', 'ops-coverage-card__title', shift.title || 'Vagt'));
+
 		var start = safeDate(shift.startTime);
 		var end = safeDate(shift.endTime);
-		left.appendChild(el('span', 'ops-coverage-card__time', start && end ? formatClock(start) + '–' + formatClock(end) : '–'));
+		// [2026-07-19] Datoen var tidligere udeladt — kun klokkeslæt (fx
+		// "19.55–22.55"), hvilket var tvetydigt for en vagt der ikke er i dag
+		// (fx i morgen). formatShiftCardDate() bruger startTime, som allerede
+		// har den korrekte dato indlejret (se mapShift() i wordpress-adapter.js).
+		var timeText = start && end
+			? formatShiftCardDate(start) + ' · ' + formatClock(start) + '–' + formatClock(end)
+			: '–';
+		left.appendChild(el('div', 'ops-coverage-card__time', timeText));
+
+		// [2026-07-19] Kun til stede når SHOW_SHIFT_NAMES=true (samme
+		// privatlivs-toggle som det klassiske layouts row-participants, se
+		// renderShiftRow() og mapShift()) — udelades ellers helt.
+		if (Array.isArray(shift.participantNames) && shift.participantNames.length > 0) {
+			left.appendChild(el('div', 'ops-coverage-card__participants', shift.participantNames.join(', ')));
+		}
+
 		top.appendChild(left);
 
 		var userCount = typeof shift.userCount === 'number' ? shift.userCount : 0;

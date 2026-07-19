@@ -589,6 +589,12 @@ body {
 	font-variant-numeric: tabular-nums;
 }
 
+.ops-coverage-card__participants {
+	margin-top: 0.3rem;
+	font-size: 0.85rem;
+	color: var(--text-secondary, var(--text-muted));
+}
+
 .ops-coverage-card__count {
 	font-size: 1.3rem;
 	font-weight: 800;
