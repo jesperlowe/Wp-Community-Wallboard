@@ -697,7 +697,12 @@
 		});
 	}
 
-	function renderOpsQueueRow(task, timeIso) {
+	// [2026-07-22, bugfix] renderOpsQueueRow() modtager nu ét sammensat item
+	// (se renderOpsQueue()) i stedet for (task, timeIso) som to argumenter —
+	// nødvendigt for at kunne bruges som renderRow i createAutoScroller(),
+	// som kun giver ét item ad gangen til sin renderRow-funktion.
+	function renderOpsQueueRow(item) {
+		var task = item.task;
 		var statusKey = task.status || 'default';
 		var row = el('div', 'ops-queue-row ops-queue-row--' + statusKey);
 
@@ -711,13 +716,29 @@
 			: '–';
 		row.appendChild(el('span', 'ops-queue-row__owner', ownerText));
 
-		var timeDate = timeIso ? new Date(timeIso) : null;
+		var timeDate = item.timeIso ? new Date(item.timeIso) : null;
 		row.appendChild(el('span', 'ops-queue-row__time', timeDate ? formatClock(timeDate) : '–'));
 
 		row.appendChild(el('span', 'ops-status-pill ops-status-pill--' + statusKey, statusMap.translateStatus(task.status)));
 
 		return row;
 	}
+
+	// [2026-07-22, bugfix] Køen renderede tidligere ALLE opgaver direkte ind i
+	// et fast-højt panel med overflow:hidden og ingen scroll — så snart det
+	// samlede antal rækker (igangværende + kommende) var højere end panelet,
+	// blev overskydende opgaver klippet væk uden varsel. Opgaver med flere
+	// tildelte navne rammer denne grænse hurtigere, da deres ANSVARLIG-kolonne
+	// ombryder til flere linjer og gør rækken højere — det er derfor
+	// specifikt "opgaver med flere brugere" der har været usynlige. Bruger nu
+	// samme createAutoScroller()-mønster som resten af wallboardet, så
+	// overskydende rækker rulles igennem i stedet for at forsvinde.
+	var opsQueueScroller = createAutoScroller(
+		document.getElementById('ops-queue-list'),
+		document.getElementById('ops-queue-empty'),
+		document.getElementById('ops-queue-page-indicator'),
+		renderOpsQueueRow
+	);
 
 	/**
 	 * Slår igangværende og kommende opgaver sammen til én prioriteret kø
@@ -727,24 +748,12 @@
 	 * gensortering nødvendig her.
 	 */
 	function renderOpsQueue(inProgress, upcoming) {
-		var list = document.getElementById('ops-queue-list');
-		var empty = document.getElementById('ops-queue-empty');
-		list.innerHTML = '';
-
-		if (inProgress.length === 0 && upcoming.length === 0) {
-			list.hidden = true;
-			empty.hidden = false;
-			return;
-		}
-
-		list.hidden = false;
-		empty.hidden = true;
-		inProgress.forEach(function (task) {
-			list.appendChild(renderOpsQueueRow(task, task.startedAt));
-		});
-		upcoming.forEach(function (task) {
-			list.appendChild(renderOpsQueueRow(task, task.scheduledAt));
-		});
+		var items = inProgress.map(function (task) {
+			return { task: task, timeIso: task.startedAt };
+		}).concat(upcoming.map(function (task) {
+			return { task: task, timeIso: task.scheduledAt };
+		}));
+		opsQueueScroller.setItems(items);
 	}
 
 	/** Andelen af de opgaver wallboardet kender til i dag, der er afsluttet — samme tal som ville fodre en fremtidig "TASKS DONE"-stat. */
@@ -903,6 +912,7 @@
 		completedPaginator.start(pageIntervalMs);
 		upcomingPaginator.start(pageIntervalMs);
 		shiftsPaginator.start(pageIntervalMs);
+		opsQueueScroller.start(pageIntervalMs);
 
 		fetchData();
 	}
